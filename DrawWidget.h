@@ -19,8 +19,11 @@ public:
 
     QSize sizeHint() const Q_DECL_OVERRIDE;
     QSize minimumSizeHint() const Q_DECL_OVERRIDE;
+
+    bool setImagePointer(const QImage* image);
+    bool setCircleCoordsPointer(const QVector<QPointF>* points);
+    bool setConvexPolyPointer(const QVector<QPolygonF>* polys);
     
-    bool setImage(const QImage& image, const bool& refresh=true);
     void centerImage(const bool& refresh=true);
     void scaleImageToViewport(const bool& refresh=true);
     
@@ -44,15 +47,18 @@ protected slots:
     void imagePanDrag(const QPointF& position);
     
 private:
-    QImage m_qImage;
+    // Things that may need to be drawn
+    const QImage* m_qImage;
+    const QVector<QPointF>* m_circleCoords;
+    const QVector<QPolygonF>* m_convexPolygons;
     
     // Mouse movement
     QPointF m_lastPos;
     QPointF m_currentPos;
     qreal m_zoomFactor;
     QPointF m_imageLoc;
-    QPointF window2Image(const QPointF& window);
     QPointF image2Window(const QPointF& image);
+    QPointF window2Image(const QPointF& window);
 };
 
 

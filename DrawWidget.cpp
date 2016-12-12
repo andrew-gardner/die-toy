@@ -7,7 +7,9 @@
 
 DrawWidget::DrawWidget(QWidget* parent)
     : QWidget(parent)
-    , m_qImage()
+    , m_qImage(NULL)
+    , m_circleCoords(NULL)
+    , m_convexPolygons(NULL)
     , m_lastPos(0, 0)
     , m_currentPos(0, 0)
     , m_zoomFactor(1.0)
@@ -40,16 +42,30 @@ QSize DrawWidget::minimumSizeHint() const
 }
 
 
-bool DrawWidget::setImage(const QImage& image, const bool& refresh)
+bool DrawWidget::setImagePointer(const QImage* image)
 {
     m_qImage = image;
-    if (refresh) update();
+}
+
+
+bool DrawWidget::setCircleCoordsPointer(const QVector<QPointF>* points)
+{
+    m_circleCoords = points;
+}
+
+
+bool DrawWidget::setConvexPolyPointer(const QVector<QPolygonF>* polys)
+{
+    m_convexPolygons = polys;
 }
 
 
 void DrawWidget::centerImage(const bool& refresh)
 {
-    QSizeF foo = (size() - (m_qImage.size() * m_zoomFactor)) * 0.5f;
+    if (m_qImage == NULL)
+        return;
+
+    QSizeF foo = (size() - (m_qImage->size() * m_zoomFactor)) * 0.5f;
     m_imageLoc.setX(foo.width());
     m_imageLoc.setY(foo.height());
     
@@ -59,10 +75,13 @@ void DrawWidget::centerImage(const bool& refresh)
 
 void DrawWidget::scaleImageToViewport(const bool& refresh)
 {
-    if (m_qImage.size().width() < m_qImage.size().height())
-        m_zoomFactor = (float)width() / (float)m_qImage.size().width();
+    if (m_qImage == NULL)
+        return;
+    
+    if (m_qImage->size().width() < m_qImage->size().height())
+        m_zoomFactor = (float)width() / (float)m_qImage->size().width();
     else
-        m_zoomFactor = (float)height() / (float)m_qImage.size().height();
+        m_zoomFactor = (float)height() / (float)m_qImage->size().height();
     
     if (refresh) update();
 }
@@ -78,7 +97,39 @@ void DrawWidget::paintEvent(QPaintEvent* event)
     
     painter.translate(m_imageLoc);
     painter.scale(m_zoomFactor, m_zoomFactor);
-    painter.drawImage(QPoint(0, 0), m_qImage);
+    
+    // Draw the image
+    if (m_qImage)
+    {
+        painter.drawImage(QPoint(0, 0), *m_qImage);
+    }
+    
+    // Draw the circles
+    if (m_circleCoords)
+    {
+        // TODO: Make the diameter and pen size scale appropriately with zoomFactor
+        const float diameter = 10.0f;
+        painter.setPen(QColor(255, 0, 0));
+
+        for (int i = 0; i < m_circleCoords->size(); i++)
+        {
+            painter.save();
+            painter.translate((*m_circleCoords)[i]);
+            painter.drawEllipse(QRectF(-diameter / 2.0, -diameter / 2.0, diameter, diameter));
+            painter.restore();
+        }
+    }
+    
+    // Draw the polygons
+    if (m_convexPolygons)
+    {
+        painter.setPen(QColor(0, 255, 0));
+        
+        for (int i = 0; i < m_convexPolygons->size(); i++)
+        {
+            painter.drawConvexPolygon((*m_convexPolygons)[i]);
+        }
+    }
 }
 
 
@@ -120,8 +171,11 @@ void DrawWidget::keyPressEvent(QKeyEvent* event)
         centerImage(false);
         update();
     }
-
-    QWidget::keyPressEvent(event);
+    else
+    {
+        // Nobody handled the keypress?  Pass it up the inheritance chain
+        QWidget::keyPressEvent(event);
+    }
 }
 
 
@@ -190,13 +244,13 @@ void DrawWidget::imagePanDrag(const QPointF& position)
 
 /// Private ///////////////////////////////////////////////////////////////////
 
-QPointF DrawWidget::window2Image(const QPointF& window)
-{
-    return (window - m_imageLoc) / m_zoomFactor;
-}
-
-
 QPointF DrawWidget::image2Window(const QPointF& image)
 {
     return m_imageLoc + (image * m_zoomFactor);
+}
+
+
+QPointF DrawWidget::window2Image(const QPointF& window)
+{
+    return (window - m_imageLoc) / m_zoomFactor;
 }

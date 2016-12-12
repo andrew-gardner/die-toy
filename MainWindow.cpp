@@ -7,14 +7,20 @@
 #include <QJsonArray>
 #include <QFileDialog>
 #include <QJsonObject>
+#include <QApplication>
 #include <QJsonDocument>
 
 
 MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
     : m_drawWidget()
+    , m_uiMode(Navigation)
+    , m_qImage()
+    , m_boundsPoints()
+    , m_polygons()
 {
-    m_drawWidget.setFocusPolicy(Qt::ClickFocus);
+    // Set the draw widget to be central and make sure it can receive focus via the mouse
     setCentralWidget(&m_drawWidget);
+    m_drawWidget.setFocusPolicy(Qt::ClickFocus);
     
     // A decent quit keyboard shortcut
     QAction* quitAct = new QAction(this);
@@ -24,6 +30,11 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
     
     // Make sure the draw widget is focused when the app loop starts
     m_drawWidget.setFocus();
+
+    // Register our local data with the pointers in the drawImage    
+    m_drawWidget.setImagePointer(&m_qImage);
+    m_drawWidget.setCircleCoordsPointer(&m_boundsPoints);
+    m_drawWidget.setConvexPolyPointer(&m_polygons);
 }
 
 
@@ -35,17 +46,19 @@ MainWindow::~MainWindow()
 
 bool MainWindow::loadImage(const QString& filename)
 {
-    QImage foo(filename);
-    if (foo.isNull())
+    // Load off disk
+    bool success = m_qImage.load(filename);
+    if (success == false)
     {
         qWarning() << "Error opening image " << filename;
         return false;
     }
-
-    m_drawWidget.setImage(foo, false);
-    if (foo.size().width() > m_drawWidget.size().width() ||
-        foo.size().height() > m_drawWidget.size().height())
+    
+    // Scale the image to the viewport if need be
+    if (m_qImage.size().width() > m_drawWidget.size().width() ||
+        m_qImage.size().height() > m_drawWidget.size().height())
         m_drawWidget.scaleImageToViewport(false);
+
     m_drawWidget.centerImage();
     
     return true;
@@ -104,6 +117,24 @@ bool MainWindow::loadDescriptionJson(const QString& filename)
 }
 
 
+void MainWindow::addBoundsPoint(const QPointF& position)
+{
+    m_boundsPoints.push_back(position);
+    
+    if (m_boundsPoints.size() == 4)
+    {
+        m_polygons.push_back(QPolygonF(m_boundsPoints));
+        qInfo() << m_polygons.back();
+    }
+    else if (m_boundsPoints.size() < 4)
+    {
+        m_polygons.clear();
+    }
+    
+    m_drawWidget.update();
+}
+
+
 void MainWindow::keyPressEvent(QKeyEvent* event)
 {
     if (event->key() == Qt::Key_O)
@@ -114,19 +145,28 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
         //    loadImage(filename);
         
         qInfo() << loadDescriptionJson("/tmp/boo.ddf");
-        event->accept();
     }
-    if (event->key() == Qt::Key_S)
+    else if (event->key() == Qt::Key_S)
     {
         // TEST
         qInfo() << saveDescriptionJson("/tmp/boo.ddf");
-        event->accept();
+    }
+    else if (event->key() == Qt::Key_0)
+    {
+        m_uiMode = Navigation;
+        QApplication::setOverrideCursor(Qt::ArrowCursor);
+    }
+    else if (event->key() == Qt::Key_1)
+    {
+        m_uiMode = BoundsDefine;
+        QApplication::setOverrideCursor(Qt::CrossCursor);
+        connect(&m_drawWidget, &DrawWidget::leftButtonClicked, this, &MainWindow::addBoundsPoint);
+        
     }
     else
     {
-        event->ignore();
+        // We're not interested in the keypress?  Pass it up the inheritance chain
+        QMainWindow::keyPressEvent(event);
     }
-
-    QMainWindow::keyPressEvent(event);
 }
 
