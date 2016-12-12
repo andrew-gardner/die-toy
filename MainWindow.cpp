@@ -3,6 +3,7 @@
 #include <QDebug>
 #include <QWidget>
 #include <QAction>
+#include <QVector2D>
 #include <QKeyEvent>
 #include <QJsonArray>
 #include <QFileDialog>
@@ -12,11 +13,13 @@
 
 
 MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
-    : m_drawWidget()
-    , m_uiMode(Navigation)
+    : m_uiMode(Navigation)
+    , m_drawWidget()
     , m_qImage()
     , m_boundsPoints()
     , m_polygons()
+    , m_romRegionHomography()
+    , m_lmbConnection()
 {
     // Set the draw widget to be central and make sure it can receive focus via the mouse
     setCentralWidget(&m_drawWidget);
@@ -119,19 +122,36 @@ bool MainWindow::loadDescriptionJson(const QString& filename)
 
 void MainWindow::addBoundsPoint(const QPointF& position)
 {
-    m_boundsPoints.push_back(position);
-    
-    if (m_boundsPoints.size() == 4)
+    // Our ROM region can only be 4-sided
+    if (m_boundsPoints.size() < 4)
     {
-        m_polygons.push_back(QPolygonF(m_boundsPoints));
-        qInfo() << m_polygons.back();
-    }
-    else if (m_boundsPoints.size() < 4)
-    {
+        m_boundsPoints.push_back(position);
+
         m_polygons.clear();
+        m_romRegionHomography.release();
+        
+        if (m_boundsPoints.size() == 4)
+        {
+            m_boundsPoints = sortedRectanglePoints(m_boundsPoints);
+            m_polygons.push_back(QPolygonF(m_boundsPoints));
+            
+            std::vector<cv::Point2f> worldSpacePoints;
+            worldSpacePoints.push_back(cv::Point2f(m_boundsPoints[0].x(), m_boundsPoints[0].y()));
+            worldSpacePoints.push_back(cv::Point2f(m_boundsPoints[1].x(), m_boundsPoints[1].y()));
+            worldSpacePoints.push_back(cv::Point2f(m_boundsPoints[2].x(), m_boundsPoints[2].y()));
+            worldSpacePoints.push_back(cv::Point2f(m_boundsPoints[3].x(), m_boundsPoints[3].y()));
+            
+            std::vector<cv::Point2f> lensletSpacePoints;
+            lensletSpacePoints.push_back(cv::Point2f(0.0f, 0.0f));
+            lensletSpacePoints.push_back(cv::Point2f(1.0f, 0.0f));
+            lensletSpacePoints.push_back(cv::Point2f(1.0f, 1.0f));
+            lensletSpacePoints.push_back(cv::Point2f(0.0f, 1.0f));
+            
+            m_romRegionHomography = cv::findHomography(lensletSpacePoints, worldSpacePoints, 0);        
+        }
+
+        m_drawWidget.update();
     }
-    
-    m_drawWidget.update();
 }
 
 
@@ -155,13 +175,13 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
     {
         m_uiMode = Navigation;
         QApplication::setOverrideCursor(Qt::ArrowCursor);
+        disconnect(m_lmbConnection);
     }
     else if (event->key() == Qt::Key_1)
     {
         m_uiMode = BoundsDefine;
         QApplication::setOverrideCursor(Qt::CrossCursor);
-        connect(&m_drawWidget, &DrawWidget::leftButtonClicked, this, &MainWindow::addBoundsPoint);
-        
+        m_lmbConnection = connect(&m_drawWidget, &DrawWidget::leftButtonClicked, this, &MainWindow::addBoundsPoint);
     }
     else
     {
@@ -170,3 +190,39 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
     }
 }
 
+
+QVector<QPointF> MainWindow::sortedRectanglePoints(const QVector<QPointF>& inPoints)
+{
+    // Get the points' centroid
+    QVector2D centroid;
+    for (int i = 0; i < inPoints.size(); i++)
+    {
+        centroid += QVector2D(inPoints[i]);
+    }
+    centroid /= inPoints.size();
+    
+    // Now organize each point by their angles compared to this centroid
+    QVector<QPointF> results(4);
+    for (int i = 0; i < inPoints.size(); i++)
+    {
+        const qreal pi2 = M_PI / 2.0;
+        const QVector2D normalizedPoint = (QVector2D(inPoints[i]) - centroid).normalized();
+        const qreal angle = atan2(normalizedPoint.y(), normalizedPoint.x());
+        if (angle < 0.0f)
+        {
+            if (angle < -pi2) 
+                results[0] = inPoints[i];
+            else 
+                results[1] = inPoints[i];
+        }
+        else
+        {
+            if (angle < pi2) 
+                results[2] = inPoints[i];
+            else 
+                results[3] = inPoints[i];
+        }
+    }
+    
+    return results;
+}

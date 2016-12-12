@@ -1,5 +1,5 @@
-#ifndef __DRAW_WIDGET_H__
-#define __DRAW_WIDGET_H__
+#ifndef DIETOY_DRAW_WIDGET_H
+#define DIETOY_DRAW_WIDGET_H
 
 #include <QImage>
 #include <QString>
@@ -63,4 +63,4 @@ private:
 
 
 
-#endif // __DRAW_WIDGET_H__
+#endif // DIETOY_DRAW_WIDGET_H
