@@ -173,7 +173,7 @@ void DrawWidget::keyPressEvent(QKeyEvent* event)
     }
     else
     {
-        // Nobody handled the keypress?  Pass it up the inheritance chain
+        // We not interested in the keypress?  Pass it up the inheritance chain
         QWidget::keyPressEvent(event);
     }
 }
@@ -218,9 +218,28 @@ void DrawWidget::mouseMoveEvent(QMouseEvent* event)
     {
       	emit rightButtonDragged(imagePointF);
     }
-    
 }
 
+
+void DrawWidget::mouseReleaseEvent(QMouseEvent* event)
+{
+    QPointF imagePointF = window2Image(event->pos());
+
+    if (event->buttons() & Qt::LeftButton)
+    {
+        emit leftButtonReleased(imagePointF);
+    }
+
+    if (event->buttons() & Qt::MidButton)
+    {
+        emit middleButtonReleased(event->pos());
+    }
+    
+    if (event->buttons() & Qt::RightButton)
+    {
+      	emit rightButtonReleased(imagePointF);
+    }
+}
 
 
 /// Default implementation of slots ///////////////////////////////////////////

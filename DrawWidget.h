@@ -30,10 +30,13 @@ public:
 signals:
     void leftButtonClicked(const QPointF& position);
     void leftButtonDragged(const QPointF& position);
+    void leftButtonReleased(const QPointF& position);
     void middleButtonClicked(const QPointF& position);
     void middleButtonDragged(const QPointF& position);
+    void middleButtonReleased(const QPointF& position);
     void rightButtonClicked(const QPointF& position);
     void rightButtonDragged(const QPointF& position);
+    void rightButtonReleased(const QPointF& position);
     
 protected:
     void paintEvent(QPaintEvent *event) Q_DECL_OVERRIDE;
@@ -41,6 +44,7 @@ protected:
     void keyPressEvent(QKeyEvent* event) Q_DECL_OVERRIDE;
     void mouseMoveEvent(QMouseEvent* event) Q_DECL_OVERRIDE;
     void mousePressEvent(QMouseEvent* event) Q_DECL_OVERRIDE;
+    void mouseReleaseEvent(QMouseEvent* event) Q_DECL_OVERRIDE;
 
 protected slots:
     void imagePanStart(const QPointF& position);

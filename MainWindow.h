@@ -20,7 +20,9 @@ public:
     bool saveDescriptionJson(const QString& filename);
     bool loadDescriptionJson(const QString& filename);
 
-    void addBoundsPoint(const QPointF& position);
+    void addOrMoveBoundsPoint(const QPointF& position);
+    void dragBoundsPoint(const QPointF& position);
+    void stopDraggingBoundsPoint(const QPointF& position);
     
     enum UiMode { Navigation, BoundsDefine, SliceDefineHorizontal, SlideDefineVertical };
     Q_ENUM(UiMode)
@@ -29,6 +31,8 @@ protected:
     void keyPressEvent(QKeyEvent* event) Q_DECL_OVERRIDE;
     
 private:
+    void clearGeneratedGeometry();
+    void computePolyAndHomography();
     QVector<QPointF> sortedRectanglePoints(const QVector<QPointF>& inPoints);
     
 private:
@@ -36,12 +40,15 @@ private:
     DrawWidget m_drawWidget;
     
     QImage m_qImage;
+    int m_activeBoundsPoint;
     QVector<QPointF> m_boundsPoints;
     QVector<QPolygonF> m_polygons;
     
     cv::Mat m_romRegionHomography;
     
-    QMetaObject::Connection m_lmbConnection;
+    QMetaObject::Connection m_lmbClickedConnection;
+    QMetaObject::Connection m_lmbDraggedConnection;
+    QMetaObject::Connection m_lmbReleasedConnection;
 };
 
 #endif // DIETOY_MAIN_WINDOW_H

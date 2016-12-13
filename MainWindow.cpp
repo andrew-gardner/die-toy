@@ -16,10 +16,13 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
     : m_uiMode(Navigation)
     , m_drawWidget()
     , m_qImage()
+    , m_activeBoundsPoint(-1)
     , m_boundsPoints()
     , m_polygons()
     , m_romRegionHomography()
-    , m_lmbConnection()
+    , m_lmbClickedConnection()
+    , m_lmbDraggedConnection()
+    , m_lmbReleasedConnection()
 {
     // Set the draw widget to be central and make sure it can receive focus via the mouse
     setCentralWidget(&m_drawWidget);
@@ -82,11 +85,15 @@ bool MainWindow::saveDescriptionJson(const QString& filename)
     root["fileType"] = "Die Description File";
     root["version"] = (int)1;
     
-    //QJsonArray array;
-    //QJsonObject foo;
-    //foo["bar"] = 5;
-    //array.append(foo);
-    //root["hi"] = array;
+    QJsonArray array;
+    for (int i = 0; i < m_boundsPoints.size(); i++)
+    {
+        QJsonArray qPointFJson;
+        qPointFJson.append(m_boundsPoints[i].x());
+        qPointFJson.append(m_boundsPoints[i].y());
+        array.append(qPointFJson);
+    }
+    root["romBounds"] = array;
     
     // Write, close, and cleanup
     file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
@@ -101,7 +108,11 @@ bool MainWindow::loadDescriptionJson(const QString& filename)
     // Open and read the file
     QFile file;
     file.setFileName(filename);
-    file.open(QIODevice::ReadOnly | QIODevice::Text);
+    bool success = file.open(QIODevice::ReadOnly | QIODevice::Text);
+    if (!success)
+        return false;
+    
+    // Read the entire file
     QString jsonString = file.readAll();
     file.close();
     
@@ -112,46 +123,99 @@ bool MainWindow::loadDescriptionJson(const QString& filename)
         return false;
     
     // Begin interpreting
-    QJsonObject jObj = jDoc.object();
+    QJsonObject docObj = jDoc.object();
     
-    // TODO: Read
+    // Make sure we're the correct file type
+    const QString fileType = docObj["fileType"].toString();
+    if (fileType.isEmpty() || fileType != "Die Description File")
+    {
+        qWarning() << "Invalid DDF file.  Aborting read";
+        return false;
+    }
+
+    // Check the version
+    const int version = docObj["version"].toInt();
+    if (version > 1 || version == 0)
+    {
+        qWarning() << "Can only read DDF file versions 1 or less";
+        return false;
+    }
+    
+    // Read the bounds points
+    m_boundsPoints.clear();
+    m_activeBoundsPoint = -1;
+    const QJsonArray romBounds = docObj["romBounds"].toArray();
+    for (int i = 0; i < romBounds.size(); i++)
+    {
+        const QJsonArray pointArray = romBounds[i].toArray();
+        m_boundsPoints.push_back(QPointF(pointArray[0].toDouble(), pointArray[1].toDouble()));
+    }
+    
+    
+    // Compute the geometry, and update the view
+    computePolyAndHomography();
+    m_drawWidget.update();
     
     return true;
 }
 
 
-void MainWindow::addBoundsPoint(const QPointF& position)
+void MainWindow::addOrMoveBoundsPoint(const QPointF& position)
 {
+    // First check to see if a current bounds point is close (you're selecting that point instead of adding a new)
+    for (int i = 0; i < m_boundsPoints.size(); i++)
+    {
+        // TODO: Scale selection radius based on drawWidget zoom factor
+        const qreal distance = (m_boundsPoints[i] - position).manhattanLength();
+        if (distance < 10.0f)
+        {
+            m_activeBoundsPoint = i;
+            return;
+        }
+    }
+    
     // Our ROM region can only be 4-sided
     if (m_boundsPoints.size() < 4)
     {
         m_boundsPoints.push_back(position);
 
-        m_polygons.clear();
-        m_romRegionHomography.release();
-        
         if (m_boundsPoints.size() == 4)
         {
-            m_boundsPoints = sortedRectanglePoints(m_boundsPoints);
-            m_polygons.push_back(QPolygonF(m_boundsPoints));
-            
-            std::vector<cv::Point2f> worldSpacePoints;
-            worldSpacePoints.push_back(cv::Point2f(m_boundsPoints[0].x(), m_boundsPoints[0].y()));
-            worldSpacePoints.push_back(cv::Point2f(m_boundsPoints[1].x(), m_boundsPoints[1].y()));
-            worldSpacePoints.push_back(cv::Point2f(m_boundsPoints[2].x(), m_boundsPoints[2].y()));
-            worldSpacePoints.push_back(cv::Point2f(m_boundsPoints[3].x(), m_boundsPoints[3].y()));
-            
-            std::vector<cv::Point2f> lensletSpacePoints;
-            lensletSpacePoints.push_back(cv::Point2f(0.0f, 0.0f));
-            lensletSpacePoints.push_back(cv::Point2f(1.0f, 0.0f));
-            lensletSpacePoints.push_back(cv::Point2f(1.0f, 1.0f));
-            lensletSpacePoints.push_back(cv::Point2f(0.0f, 1.0f));
-            
-            m_romRegionHomography = cv::findHomography(lensletSpacePoints, worldSpacePoints, 0);        
+            computePolyAndHomography();
         }
 
         m_drawWidget.update();
     }
+}
+
+
+void MainWindow::dragBoundsPoint(const QPointF& position)
+{
+    if (m_activeBoundsPoint < 0)
+        return;
+    
+    if (m_boundsPoints.size() == 4)
+    {
+        computePolyAndHomography();
+    }
+    
+    m_boundsPoints[m_activeBoundsPoint] = position;
+    m_drawWidget.update();
+}
+
+
+void MainWindow::stopDraggingBoundsPoint(const QPointF& position)
+{
+    if (m_activeBoundsPoint < 0)
+        return;
+    
+    if (m_boundsPoints.size() == 4)
+    {
+        computePolyAndHomography();
+    }
+    
+    m_boundsPoints[m_activeBoundsPoint] = position;
+    m_activeBoundsPoint = -1;
 }
 
 
@@ -160,10 +224,14 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
     if (event->key() == Qt::Key_O)
     {
         // TEST
-        //QString filename = QFileDialog::getOpenFileName(this, tr("Open Image"), "", tr("Images (*.png *.jpg *.tif)"));
-        //if (filename != "")
-        //    loadImage(filename);
+        QString filename = QFileDialog::getOpenFileName(this, tr("Open Image"), "", tr("Images (*.png *.jpg *.tif)"));
+        if (filename != "")
+            loadImage(filename);
         
+    }
+    else if (event->key() == Qt::Key_L)
+    {
+        // TEST
         qInfo() << loadDescriptionJson("/tmp/boo.ddf");
     }
     else if (event->key() == Qt::Key_S)
@@ -175,19 +243,56 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
     {
         m_uiMode = Navigation;
         QApplication::setOverrideCursor(Qt::ArrowCursor);
-        disconnect(m_lmbConnection);
+        disconnect(m_lmbClickedConnection);
+        disconnect(m_lmbDraggedConnection);
+        disconnect(m_lmbReleasedConnection);
     }
     else if (event->key() == Qt::Key_1)
     {
         m_uiMode = BoundsDefine;
         QApplication::setOverrideCursor(Qt::CrossCursor);
-        m_lmbConnection = connect(&m_drawWidget, &DrawWidget::leftButtonClicked, this, &MainWindow::addBoundsPoint);
+        m_lmbClickedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonClicked, this, &MainWindow::addOrMoveBoundsPoint);
+        m_lmbDraggedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonDragged, this, &MainWindow::dragBoundsPoint);
+        m_lmbReleasedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonReleased, this, &MainWindow::stopDraggingBoundsPoint);
     }
+    
     else
     {
         // We're not interested in the keypress?  Pass it up the inheritance chain
         QMainWindow::keyPressEvent(event);
     }
+}
+
+
+void MainWindow::clearGeneratedGeometry()
+{
+    m_polygons.clear();
+    m_romRegionHomography.release();    
+}
+
+
+void MainWindow::computePolyAndHomography()
+{
+    clearGeneratedGeometry();
+    
+    // Sort the points and create a convex polygon from them
+    m_boundsPoints = sortedRectanglePoints(m_boundsPoints);
+    m_polygons.push_back(QPolygonF(m_boundsPoints));
+    
+    // Compute a homography mapping the almost-rectangular ROM region to a rectangle
+    std::vector<cv::Point2f> worldSpacePoints;
+    worldSpacePoints.push_back(cv::Point2f(m_boundsPoints[0].x(), m_boundsPoints[0].y()));
+    worldSpacePoints.push_back(cv::Point2f(m_boundsPoints[1].x(), m_boundsPoints[1].y()));
+    worldSpacePoints.push_back(cv::Point2f(m_boundsPoints[2].x(), m_boundsPoints[2].y()));
+    worldSpacePoints.push_back(cv::Point2f(m_boundsPoints[3].x(), m_boundsPoints[3].y()));
+    
+    std::vector<cv::Point2f> lensletSpacePoints;
+    lensletSpacePoints.push_back(cv::Point2f(0.0f, 0.0f));
+    lensletSpacePoints.push_back(cv::Point2f(1.0f, 0.0f));
+    lensletSpacePoints.push_back(cv::Point2f(1.0f, 1.0f));
+    lensletSpacePoints.push_back(cv::Point2f(0.0f, 1.0f));
+    
+    m_romRegionHomography = cv::findHomography(lensletSpacePoints, worldSpacePoints, 0);        
 }
 
 
@@ -226,3 +331,4 @@ QVector<QPointF> MainWindow::sortedRectanglePoints(const QVector<QPointF>& inPoi
     
     return results;
 }
+
