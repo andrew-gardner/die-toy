@@ -23,6 +23,10 @@ public:
     void addOrMoveBoundsPoint(const QPointF& position);
     void dragBoundsPoint(const QPointF& position);
     void stopDraggingBoundsPoint(const QPointF& position);
+
+    void addOrMoveSlice(const QPointF& position);
+    //void dragSlice(const QPointF& position);
+    //void stopDraggingSlice(const QPointF& position);
     
     enum UiMode { Navigation, BoundsDefine, SliceDefineHorizontal, SlideDefineVertical };
     Q_ENUM(UiMode)
@@ -33,6 +37,7 @@ protected:
 private:
     void clearGeneratedGeometry();
     void computePolyAndHomography();
+    void recomputeLinesFromHomography();
     QVector<QPointF> sortedRectanglePoints(const QVector<QPointF>& inPoints);
     
 private:
@@ -42,7 +47,9 @@ private:
     QImage m_qImage;
     int m_activeBoundsPoint;
     QVector<QPointF> m_boundsPoints;
-    QVector<QPolygonF> m_polygons;
+    QVector<QPolygonF> m_boundsPolygons;
+    QVector<qreal> m_horizSlices;
+    QVector<QLineF> m_sliceLines;
     
     cv::Mat m_romRegionHomography;
     

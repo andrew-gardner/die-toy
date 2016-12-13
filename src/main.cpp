@@ -51,5 +51,9 @@ int main(int argc, char *argv[])
     if (dieImageFilename != "")
         win.loadImage(dieImageFilename);
     
+    if (dieDescriptionFilename != "")
+        win.loadDescriptionJson(dieDescriptionFilename);
+    
+    
     return app.exec();
 }

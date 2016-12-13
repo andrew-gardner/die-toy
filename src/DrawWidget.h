@@ -23,6 +23,7 @@ public:
     bool setImagePointer(const QImage* image);
     bool setCircleCoordsPointer(const QVector<QPointF>* points);
     bool setConvexPolyPointer(const QVector<QPolygonF>* polys);
+    bool setLinesPointer(const QVector<QLineF>* lines);
     
     void centerImage(const bool& refresh=true);
     void scaleImageToViewport(const bool& refresh=true);
@@ -55,6 +56,7 @@ private:
     const QImage* m_qImage;
     const QVector<QPointF>* m_circleCoords;
     const QVector<QPolygonF>* m_convexPolygons;
+    const QVector<QLineF>* m_lines;
     
     // Mouse movement
     QPointF m_lastPos;
