@@ -41,6 +41,9 @@ IF (OPENMP_FOUND)
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 ENDIF()
 
-SET(SOURCEFILES main.cpp MainWindow.cpp DrawWidget.cpp)
+SET(SOURCEFILES 
+	src/main.cpp 
+	src/MainWindow.cpp 
+	src/DrawWidget.cpp)
 ADD_EXECUTABLE(dieToy ${SOURCEFILES})
 TARGET_LINK_LIBRARIES(dieToy ${OpenCV2_LIBRARIES} ${Qt5Widgets_LIBRARIES})
