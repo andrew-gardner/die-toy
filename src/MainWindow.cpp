@@ -14,17 +14,24 @@
 
 //
 // TODO list
+// ---------
 //
 // * Convert everything to Qt undo command structure
-// * Come up with a better way to paste (interactively, likely)
-// * Select multiple slice lines with a drag
-// * A single click adds both a horizontal and vertical slice line
-// * Vertical slices
-// * Sorting with copy/paste (instead of taking offset order)
-// * Drag slice lines
 // * Menu bar & menu items
 // * Status bar
+// * Display bit regions as circles or something
+// * A view to see an enlarged version of the current bit region
+// * Drag slice lines
+// * Select multiple slice lines with a drag
+// * A single click adds both a horizontal and vertical slice line
+// * Come up with a better way to paste (interactively, likely)
+// * A paste-at option - paste the selecte things right where the mouse is
+// * Sorting with copy/paste (instead of taking offset order)
+// * Export all bit regions to new image(s)
+// * A range placement option - put start, put end, fill with X between
+// * DrawWidget image chunking for clipping potential
 // 
+
 
 MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
     : m_uiMode(Navigation)
@@ -34,8 +41,10 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
     , m_boundsPoints()
     , m_boundsPolygons()
     , m_horizSlices()
+    , m_vertSlices()
     , m_sliceLines()
-    , m_activeHorizSlices()
+    , m_activeSlices()
+    , m_bitLocations()
     , m_sliceLineColors()
     , m_copiedSliceOffsets()
     , m_romRegionHomography()
@@ -129,6 +138,14 @@ bool MainWindow::saveDescriptionJson(const QString& filename)
         horizSliceArray.append(m_horizSlices[i]);
     }
     root["horizontalSlices"] = horizSliceArray;
+
+    // Write the vertical slice offsets
+    QJsonArray vertSliceArray;
+    for (int i = 0; i < m_vertSlices.size(); i++)
+    {
+        vertSliceArray.append(m_vertSlices[i]);
+    }
+    root["verticalSlices"] = vertSliceArray;
     
     // Write, close, and cleanup
     file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
@@ -188,11 +205,20 @@ bool MainWindow::loadDescriptionJson(const QString& filename)
     
     // Read the horizontal slice offsets
     m_horizSlices.clear();
-    m_activeHorizSlices.clear();
+    m_activeSlices.clear();
     const QJsonArray horizSlices = docObj["horizontalSlices"].toArray();
     for (int i = 0; i < horizSlices.size(); i++)
     {
         m_horizSlices.push_back(horizSlices[i].toDouble());
+    }
+    
+    // Read the vertical slice offsets
+    m_vertSlices.clear();
+    m_activeSlices.clear();
+    const QJsonArray vertSlices = docObj["verticalSlices"].toArray();
+    for (int i = 0; i < vertSlices.size(); i++)
+    {
+        m_vertSlices.push_back(vertSlices[i].toDouble());
     }
     
     // Compute the geometry, and update the view
@@ -266,19 +292,22 @@ void MainWindow::addOrMoveSlice(const QPointF& position)
     if (!m_boundsPolygons[0].containsPoint(position, Qt::OddEvenFill))
         return;
     
+    // Switch the slice we're operating on based on the current ui mode
+    QVector<qreal>& slices = (m_uiMode == SliceDefineHorizontal) ? m_horizSlices : m_vertSlices;
+    
     // First check to see if a current slice line is close (you're selecting instead of adding a new)
-    for (int i = 0; i < m_horizSlices.size(); i++)
+    for (int i = 0; i < slices.size(); i++)
     {
         // TODO: Scale selection distance based on drawWidget zoom factor
-        const qreal distance = linePointDistance(slicePositionToLine(m_horizSlices[i]), position);
+        const qreal distance = linePointDistance(slicePositionToLine(slices[i], m_uiMode), position);
         if (distance < 5.0f)
         {
             // TODO: inefficient
-            const int alreadySelected = m_activeHorizSlices.indexOf(i);
+            const int alreadySelected = m_activeSlices.indexOf(i);
             if (alreadySelected != -1)
-                m_activeHorizSlices.remove(alreadySelected);
+                m_activeSlices.remove(alreadySelected);
             else
-                m_activeHorizSlices.push_back(i);
+                m_activeSlices.push_back(i);
             recomputeSliceLinesFromHomography();
             m_drawWidget.update();
             return;
@@ -286,7 +315,7 @@ void MainWindow::addOrMoveSlice(const QPointF& position)
     }
 
     // If you did't select anything, you must want to clear the selection
-    m_activeHorizSlices.clear();
+    m_activeSlices.clear();
     
     // Convert the image-space position into ROM-die-space using the homography
     cv::Mat pointMat = cv::Mat(3, 1, CV_64F);
@@ -298,10 +327,10 @@ void MainWindow::addOrMoveSlice(const QPointF& position)
     const cv::Mat originPointCv = m_romRegionHomography * pointMat;
     const cv::Mat originPointNormalizedCv = originPointCv / originPointCv.at<double>(0,2);
     const QPointF romDiePoint(originPointNormalizedCv.at<double>(0,0), originPointNormalizedCv.at<double>(0,1));
-    m_horizSlices.push_back(romDiePoint.x());
+    const qreal pushPoint = (m_uiMode == SliceDefineHorizontal) ? romDiePoint.x() : romDiePoint.y();
+    slices.push_back(pushPoint);
 
     recomputeSliceLinesFromHomography();
-    
     m_drawWidget.update();
 }
 
@@ -337,20 +366,22 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
         // TODO: Give me back my CTRL+C, you mean ole' GUI widget!
         // Copy selected slice offsets
         m_copiedSliceOffsets.clear();
-        for (int i = 0; i < m_activeHorizSlices.size(); i++)
+        QVector<qreal>& slices = (m_uiMode == SliceDefineHorizontal) ? m_horizSlices : m_vertSlices;
+        for (int i = 0; i < m_activeSlices.size(); i++)
         {
-            const int& asli = m_activeHorizSlices[i];
-            const qreal offset = m_horizSlices[asli] - m_horizSlices[asli-1];
+            const int& asli = m_activeSlices[i];
+            const qreal offset = slices[asli] - slices[asli-1];
             m_copiedSliceOffsets.push_back(offset);
         }
     }
     else if (ctrlHeld && event->key() == Qt::Key_V)
     {
         // Paste selected slice offsets after the last slice
+        QVector<qreal>& slices = (m_uiMode == SliceDefineHorizontal) ? m_horizSlices : m_vertSlices;
         for (int i = 0; i < m_copiedSliceOffsets.size(); i++)
         {
-            const qreal& lastSlicePosition = m_horizSlices.back();
-            m_horizSlices.push_back(lastSlicePosition + m_copiedSliceOffsets[i]);
+            const qreal& lastSlicePosition = slices.back();
+            slices.push_back(lastSlicePosition + m_copiedSliceOffsets[i]);
         }
         recomputeSliceLinesFromHomography();
         m_drawWidget.update();
@@ -382,8 +413,47 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
         disconnect(m_lmbDraggedConnection);
         disconnect(m_lmbReleasedConnection);
         m_lmbClickedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonClicked, this, &MainWindow::addOrMoveSlice);
-        //m_lmbDraggedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonDragged, this, &MainWindow::dragBoundsPoint);
-        //m_lmbReleasedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonReleased, this, &MainWindow::stopDraggingBoundsPoint);
+        recomputeSliceLinesFromHomography();
+        m_drawWidget.update();
+    }
+    else if (event->key() == Qt::Key_3)
+    {
+        m_uiMode = SliceDefineVertical;
+        QApplication::setOverrideCursor(Qt::CrossCursor);
+        disconnect(m_lmbClickedConnection);
+        disconnect(m_lmbDraggedConnection);
+        disconnect(m_lmbReleasedConnection);
+        m_lmbClickedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonClicked, this, &MainWindow::addOrMoveSlice);
+        recomputeSliceLinesFromHomography();
+        m_drawWidget.update();
+    }
+    else if (event->key() == Qt::Key_4)
+    {
+        m_uiMode = BitRegionDisplay;
+        QApplication::setOverrideCursor(Qt::ArrowCursor);
+        disconnect(m_lmbClickedConnection);
+        disconnect(m_lmbDraggedConnection);
+        disconnect(m_lmbReleasedConnection);
+        
+        m_sliceLines.clear();       // TODO: make a delete visual stuff function
+        m_sliceLineColors.clear();
+        m_drawWidget.setConvexPolyPointer(NULL);
+        m_drawWidget.setCircleCoordsPointer(&m_bitLocations);
+        
+        for (int h = 0; h < m_horizSlices.size(); h++)
+        {
+            const QLineF hLine = slicePositionToLine(m_horizSlices[h], SliceDefineHorizontal);
+            for (int v = 0; v < m_vertSlices.size(); v++)
+            {
+                const QLineF vLine = slicePositionToLine(m_vertSlices[v], SliceDefineVertical);
+                
+                QPointF intersection;
+                hLine.intersect(vLine, &intersection);
+                m_bitLocations.push_back(intersection);
+            }
+        }
+        
+        m_drawWidget.update();
     }
     else if (event->key() == Qt::Key_Delete)
     {
@@ -401,16 +471,18 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
 void MainWindow::deleteSelectedSlices()
 {
     // TODO: SUUUUUPER-inefficient
-    QVector<qreal> newHorizSlices;
-    for (int i = 0; i < m_horizSlices.size(); i++)
+    QVector<qreal>& slices = (m_uiMode == SliceDefineHorizontal) ? m_horizSlices : m_vertSlices;
+    
+    QVector<qreal> newSlices;
+    for (int i = 0; i < slices.size(); i++)
     {
-        if (!m_activeHorizSlices.contains(i))
+        if (!m_activeSlices.contains(i))
         {
-            newHorizSlices.push_back(m_horizSlices[i]);
+            newSlices.push_back(slices[i]);
         }
     }
-    m_horizSlices = newHorizSlices;
-    m_activeHorizSlices.clear();
+    slices = newSlices;
+    m_activeSlices.clear();
     recomputeSliceLinesFromHomography();
 }
 
@@ -452,38 +524,58 @@ void MainWindow::recomputeSliceLinesFromHomography()
     m_sliceLines.clear();
     m_sliceLineColors.clear();
     
-    for (int i = 0; i < m_horizSlices.size(); i++)
+    if (m_uiMode == SliceDefineHorizontal)
     {
-        const qreal& horizSlicePoint = m_horizSlices[i];
-        
-        // Compute the points for the visible line
-        QLineF pb = slicePositionToLine(horizSlicePoint);
-        m_sliceLines.push_back(pb);
-        if (m_activeHorizSlices.contains(i)) // TODO: Inefficient
-            m_sliceLineColors.push_back(QColor(255, 255, 0));
-        else
-            m_sliceLineColors.push_back(QColor(0, 0, 255));
+        for (int i = 0; i < m_horizSlices.size(); i++)
+        {
+            // Compute the points for the visible line
+            QLineF pb = slicePositionToLine(m_horizSlices[i], SliceDefineHorizontal);
+            m_sliceLines.push_back(pb);
+    
+            if (m_activeSlices.contains(i))
+                m_sliceLineColors.push_back(QColor(255, 255, 0));
+            else
+                m_sliceLineColors.push_back(QColor(0, 0, 255));
+        }
+    }
+
+    if (m_uiMode == SliceDefineVertical)
+    {
+        for (int i = 0; i < m_vertSlices.size(); i++)
+        {
+            // Compute the points for the visible line
+            QLineF pb = slicePositionToLine(m_vertSlices[i], SliceDefineVertical);
+            m_sliceLines.push_back(pb);
+    
+            if (m_activeSlices.contains(i))
+                m_sliceLineColors.push_back(QColor(255, 255, 0));
+            else
+                m_sliceLineColors.push_back(QColor(0, 0, 255));
+        }
     }
 }
 
 
-QLineF MainWindow::slicePositionToLine(const qreal& slicePosition)
+QLineF MainWindow::slicePositionToLine(const qreal& slicePosition, const UiMode& hv)
 {
+    // Get the image space position of one extreme of the slice
     const cv::Mat homographyInverse = m_romRegionHomography.inv();
     cv::Mat topPointMat = cv::Mat(3, 1, CV_64F);
-    topPointMat.at<double>(0, 0) = slicePosition;
-    topPointMat.at<double>(1, 0) = 0.0;
+    topPointMat.at<double>(0, 0) = (hv == SliceDefineHorizontal) ? slicePosition : 0.0;
+    topPointMat.at<double>(1, 0) = (hv == SliceDefineVertical) ? slicePosition : 0.0;
     topPointMat.at<double>(2, 0) = 1.0;
     const cv::Mat topPointCv = homographyInverse * topPointMat;
     const cv::Mat topPointNormalizedCv = topPointCv / topPointCv.at<double>(0,2);
     
+    // Get the image space position of the other extreme of the slice
     cv::Mat bottomPointMat = cv::Mat(3, 1, CV_64F);
-    bottomPointMat.at<double>(0, 0) = slicePosition;
-    bottomPointMat.at<double>(1, 0) = 1.0;
+    bottomPointMat.at<double>(0, 0) = (hv == SliceDefineHorizontal) ? slicePosition : 1.0;
+    bottomPointMat.at<double>(1, 0) = (hv == SliceDefineVertical) ? slicePosition : 1.0;
     bottomPointMat.at<double>(2, 0) = 1.0;
     const cv::Mat bottomPointCv = homographyInverse * bottomPointMat;
     const cv::Mat bottomPointNormalizedCv = bottomPointCv / bottomPointCv.at<double>(0,2);
     
+    // Construct and return a QLineF from the results
     QLineF pb(QPointF(topPointNormalizedCv.at<double>(0,0), topPointNormalizedCv.at<double>(0,1)),
               QPointF(bottomPointNormalizedCv.at<double>(0,0), bottomPointNormalizedCv.at<double>(0,1)));
     

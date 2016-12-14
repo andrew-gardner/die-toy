@@ -28,7 +28,11 @@ public:
     //void dragSlice(const QPointF& position);
     //void stopDraggingSlice(const QPointF& position);
     
-    enum UiMode { Navigation, BoundsDefine, SliceDefineHorizontal, SlideDefineVertical };
+    enum UiMode { Navigation, 
+                  BoundsDefine, 
+                  SliceDefineHorizontal, 
+                  SliceDefineVertical,
+                  BitRegionDisplay };
     Q_ENUM(UiMode)
     
 protected:
@@ -41,7 +45,7 @@ private:
     void deleteSelectedSlices();
     void recomputeSliceLinesFromHomography();
     
-    QLineF slicePositionToLine(const qreal& slicePosition);
+    QLineF slicePositionToLine(const qreal& slicePosition, const UiMode& hv);
     QVector<QPointF> sortedRectanglePoints(const QVector<QPointF>& inPoints);
     qreal linePointDistance(const QLineF& line, const QPointF& point);
     
@@ -52,16 +56,22 @@ private:
     // The full die image displayed
     QImage m_qImage;
     
-    // ROM die region markers and the geometry that they create
+    // ROM die region markers, the geometry that they create
     int m_activeBoundsPoint;
     QVector<QPointF> m_boundsPoints;
     QVector<QPolygonF> m_boundsPolygons;
     cv::Mat m_romRegionHomography;
     
-    // Horizontal slices in the ROM die
+    // Slice offsets in the ROM die
     QVector<qreal> m_horizSlices;
-    QVector<int> m_activeHorizSlices;
+    QVector<qreal> m_vertSlices;
 
+    // Selection mask for the active slice mode
+    QVector<int> m_activeSlices;
+    
+    // The locations of every bit in the image
+    QVector<QPointF> m_bitLocations;
+    
     // Generated data used solely for display
     QVector<QLineF> m_sliceLines;
     QVector<QColor> m_sliceLineColors;
