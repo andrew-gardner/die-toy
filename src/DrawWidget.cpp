@@ -77,8 +77,10 @@ void DrawWidget::scaleImageToViewport(const bool& refresh)
 void DrawWidget::paintEvent(QPaintEvent* event)
 {
     QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing, true);    // TODO: Verify this is a good idea for images
+    painter.setWorldMatrixEnabled(true);
+    painter.setRenderHint(QPainter::Antialiasing, true);
     
+    // Transform the camera
     painter.translate(m_imageLoc);
     painter.scale(m_zoomFactor, m_zoomFactor);
     
@@ -97,6 +99,15 @@ void DrawWidget::paintEvent(QPaintEvent* event)
 
         for (int i = 0; i < m_circleCoords->size(); i++)
         {
+            // Clipping
+            const QRectF& viewportRect = painter.viewport();
+            const QPointF clipLocation = (*m_circleCoords)[i] * painter.worldMatrix();
+            if (clipLocation.x() < -diameter || clipLocation.y() < -diameter)
+                continue;
+            if (clipLocation.x() > viewportRect.width()+diameter || clipLocation.y() > viewportRect.height()+diameter)
+                continue;
+            
+            // Draw everyone that survives the clippage
             painter.save();
             painter.translate((*m_circleCoords)[i]);
             painter.drawEllipse(QRectF(-diameter / 2.0, -diameter / 2.0, diameter, diameter));
