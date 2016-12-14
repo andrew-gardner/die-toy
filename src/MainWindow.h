@@ -36,6 +36,7 @@ protected:
     
 private:
     // TODO: Some of these are a bit too 'internal' for me
+    void deleteSelectedSlices();
     void clearGeneratedGeometry();
     void computePolyAndHomography();
     void recomputeLinesFromHomography();
@@ -58,6 +59,7 @@ private:
     QVector<QLineF> m_sliceLines;
     QVector<int> m_activeSliceLines;
     QVector<QColor> m_sliceLineColors;
+    QVector<qreal> m_copiedSliceOffsets;
     
     cv::Mat m_romRegionHomography;
     

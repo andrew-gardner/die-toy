@@ -24,6 +24,7 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
     , m_sliceLines()
     , m_activeSliceLines()
     , m_sliceLineColors()
+    , m_copiedSliceOffsets()
     , m_romRegionHomography()
     , m_lmbClickedConnection()
     , m_lmbDraggedConnection()
@@ -42,7 +43,7 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
     // Make sure the draw widget is focused when the app loop starts
     m_drawWidget.setFocus();
 
-    // Register our local data with the pointers in the drawImage    
+    // Register our local data with the pointers in the drawImage
     m_drawWidget.setImagePointer(&m_qImage);
     m_drawWidget.setCircleCoordsPointer(&m_boundsPoints);
     m_drawWidget.setConvexPolyPointer(&m_boundsPolygons);
@@ -241,15 +242,19 @@ void MainWindow::addOrMoveSlice(const QPointF& position)
         const qreal distance = linePointDistance(slicePositionToLine(m_horizSlices[i]), position);
         if (distance < 5.0f)
         {
-            m_activeSliceLines.push_back(i);
+            const int alreadySelected = m_activeSliceLines.indexOf(i);
+            if (alreadySelected != -1)
+                m_activeSliceLines.remove(alreadySelected);
+            else
+                m_activeSliceLines.push_back(i);
             recomputeLinesFromHomography();
-            m_drawWidget.update();    
+            m_drawWidget.update();
             return;
         }
     }
 
     // If you did't select anything, you must want to clear the selection
-    m_activeSliceLines.clear();    
+    m_activeSliceLines.clear();
     
     // Convert the image-space position into ROM-die-space using the homography
     cv::Mat pointMat = cv::Mat(3, 1, CV_64F);
@@ -265,7 +270,7 @@ void MainWindow::addOrMoveSlice(const QPointF& position)
 
     recomputeLinesFromHomography();
     
-    m_drawWidget.update();    
+    m_drawWidget.update();
 }
 
 
@@ -276,21 +281,47 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
     // TODO: Make these menu options soon
     if (ctrlHeld && event->key() == Qt::Key_O)
     {
+        // Load Image
         QString filename = QFileDialog::getOpenFileName(this, tr("Open Image"), "", tr("Images (*.png *.jpg *.tif)"));
         if (filename != "")
             loadImage(filename);
     }
     else if (ctrlHeld && event->key() == Qt::Key_I)
     {
+        // Load DDF
         QString filename = QFileDialog::getOpenFileName(this, tr("Open Die Description File"), "", tr("ddf (*.ddf)"));
         if (filename != "")
             loadDescriptionJson(filename);
     }
     else if (ctrlHeld && event->key() == Qt::Key_S)
     {
+        // Save DDF
         QString filename = QFileDialog::getSaveFileName(this, tr("Save Die Description File"), "", tr("ddf (*.ddf)"));
         if (filename != "")
             saveDescriptionJson(filename);
+    }
+    else if (ctrlHeld && event->key() == Qt::Key_B)
+    {
+        // TODO: Give me back my CTRL+C GUI widget!
+        // Copy selected slice offsets
+        m_copiedSliceOffsets.clear();
+        for (int i = 0; i < m_activeSliceLines.size(); i++)
+        {
+            const int& asli = m_activeSliceLines[i];
+            const qreal offset = m_horizSlices[asli] - m_horizSlices[asli-1];
+            m_copiedSliceOffsets.push_back(offset);
+        }
+    }
+    else if (ctrlHeld && event->key() == Qt::Key_V)
+    {
+        // Paste selected slice offsets after the last slice
+        for (int i = 0; i < m_copiedSliceOffsets.size(); i++)
+        {
+            const qreal& lastSlicePosition = m_horizSlices.back();
+            m_horizSlices.push_back(lastSlicePosition + m_copiedSliceOffsets[i]);
+        }
+        recomputeLinesFromHomography();
+        m_drawWidget.update();
     }
     else if (event->key() == Qt::Key_0)
     {
@@ -324,24 +355,8 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
     }
     else if (event->key() == Qt::Key_Delete)
     {
-        // TODO: Super-inefficient
-        QVector<QLineF> newLines;
-        QVector<QColor> newColors;
-        QVector<qreal> newHorizSlices;
-        for (int i = 0; i < m_sliceLines.size(); i++)
-        {
-            if (!m_activeSliceLines.contains(i))
-            {
-                newLines.push_back(m_sliceLines[i]);
-                newColors.push_back(QColor(0, 0, 255));
-                newHorizSlices.push_back(m_horizSlices[i]);
-            }
-        }
-        m_sliceLines = newLines;
-        m_sliceLineColors = newColors;
-        m_horizSlices = newHorizSlices;
-        m_activeSliceLines.clear();
-        m_drawWidget.update();            
+        deleteSelectedSlices();
+        m_drawWidget.update();
     }
     else
     {
@@ -351,10 +366,32 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
 }
 
 
+void MainWindow::deleteSelectedSlices()
+{
+    // TODO: SUUUUUPER-inefficient
+    QVector<QLineF> newLines;
+    QVector<QColor> newColors;
+    QVector<qreal> newHorizSlices;
+    for (int i = 0; i < m_sliceLines.size(); i++)
+    {
+        if (!m_activeSliceLines.contains(i))
+        {
+            newLines.push_back(m_sliceLines[i]);
+            newColors.push_back(QColor(0, 0, 255));
+            newHorizSlices.push_back(m_horizSlices[i]);
+        }
+    }
+    m_sliceLines = newLines;
+    m_sliceLineColors = newColors;
+    m_horizSlices = newHorizSlices;
+    m_activeSliceLines.clear();
+}
+
+
 void MainWindow::clearGeneratedGeometry()
 {
     m_boundsPolygons.clear();
-    m_romRegionHomography.release();    
+    m_romRegionHomography.release();
 }
 
 
@@ -379,7 +416,7 @@ void MainWindow::computePolyAndHomography()
     romDieSpacePoints.push_back(cv::Point2f(1.0f, 1.0f));
     romDieSpacePoints.push_back(cv::Point2f(0.0f, 1.0f));
     
-    m_romRegionHomography = cv::findHomography(imageSpacePoints, romDieSpacePoints, 0);        
+    m_romRegionHomography = cv::findHomography(imageSpacePoints, romDieSpacePoints, 0);
 }
 
 
