@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QAction>
 #include <QVector2D>
+#include <QVector3D>
 #include <QKeyEvent>
 #include <QJsonArray>
 #include <QFileDialog>
@@ -21,6 +22,8 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
     , m_boundsPolygons()
     , m_horizSlices()
     , m_sliceLines()
+    , m_activeSliceLines()
+    , m_sliceLineColors()
     , m_romRegionHomography()
     , m_lmbClickedConnection()
     , m_lmbDraggedConnection()
@@ -44,6 +47,7 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
     m_drawWidget.setCircleCoordsPointer(&m_boundsPoints);
     m_drawWidget.setConvexPolyPointer(&m_boundsPolygons);
     m_drawWidget.setLinesPointer(&m_sliceLines);
+    m_drawWidget.setLineColorsPointer(&m_sliceLineColors);
 }
 
 
@@ -159,7 +163,6 @@ bool MainWindow::loadDescriptionJson(const QString& filename)
         m_boundsPoints.push_back(QPointF(pointArray[0].toDouble(), pointArray[1].toDouble()));
     }
     
-    
     // Compute the geometry, and update the view
     computePolyAndHomography();
     recomputeLinesFromHomography();
@@ -241,17 +244,22 @@ void MainWindow::addOrMoveSlice(const QPointF& position)
     if (!m_boundsPolygons[0].containsPoint(position, Qt::OddEvenFill))
         return;
     
-//    // First check to see if a current slice line is close (you're selecting instead of adding a new)
-//    for (int i = 0; i < m_boundsPoints.size(); i++)
-//    {
-//        // TODO: Scale selection radius based on drawWidget zoom factor
-//        const qreal distance = (m_boundsPoints[i] - position).manhattanLength();
-//        if (distance < 10.0f)
-//        {
-//            m_activeBoundsPoint = i;
-//            return;
-//        }
-//    }
+    // First check to see if a current slice line is close (you're selecting instead of adding a new)
+    for (int i = 0; i < m_horizSlices.size(); i++)
+    {
+        // TODO: Scale selection distance based on drawWidget zoom factor
+        const qreal distance = linePointDistance(slicePositionToLine(m_horizSlices[i]), position);
+        if (distance < 5.0f)
+        {
+            m_activeSliceLines.push_back(i);
+            recomputeLinesFromHomography();
+            m_drawWidget.update();    
+            return;
+        }
+    }
+
+    // If you did't select anything, you must want to clear the selection
+    m_activeSliceLines.clear();    
     
     // Convert the image-space position into ROM-die-space using the homography
     cv::Mat pointMat = cv::Mat(3, 1, CV_64F);
@@ -367,34 +375,45 @@ void MainWindow::computePolyAndHomography()
 void MainWindow::recomputeLinesFromHomography()
 {
     m_sliceLines.clear();
+    m_sliceLineColors.clear();
     
     for (int i = 0; i < m_horizSlices.size(); i++)
     {
         const qreal& horizSlicePoint = m_horizSlices[i];
         
         // Compute the points for the visible line
-        const cv::Mat homographyInverse = m_romRegionHomography.inv();
-        cv::Mat topPointMat = cv::Mat(3, 1, CV_64F);
-        topPointMat.at<double>(0, 0) = horizSlicePoint;
-        topPointMat.at<double>(1, 0) = 0.0;
-        topPointMat.at<double>(2, 0) = 1.0;
-        const cv::Mat topPointCv = homographyInverse * topPointMat;
-        const cv::Mat topPointNormalizedCv = topPointCv / topPointCv.at<double>(0,2);
-        
-        cv::Mat bottomPointMat = cv::Mat(3, 1, CV_64F);
-        bottomPointMat.at<double>(0, 0) = horizSlicePoint;
-        bottomPointMat.at<double>(1, 0) = 1.0;
-        bottomPointMat.at<double>(2, 0) = 1.0;
-        const cv::Mat bottomPointCv = homographyInverse * bottomPointMat;
-        const cv::Mat bottomPointNormalizedCv = bottomPointCv / bottomPointCv.at<double>(0,2);
-        
-        QLineF pb(QPointF(topPointNormalizedCv.at<double>(0,0), topPointNormalizedCv.at<double>(0,1)),
-                  QPointF(bottomPointNormalizedCv.at<double>(0,0), bottomPointNormalizedCv.at<double>(0,1)));
+        QLineF pb = slicePositionToLine(horizSlicePoint);
         m_sliceLines.push_back(pb);
+        if (m_activeSliceLines.contains(i))
+            m_sliceLineColors.push_back(QColor(255, 255, 0));
+        else
+            m_sliceLineColors.push_back(QColor(0, 0, 255));
     }
 }
 
 
+QLineF MainWindow::slicePositionToLine(const qreal& slicePosition)
+{
+    const cv::Mat homographyInverse = m_romRegionHomography.inv();
+    cv::Mat topPointMat = cv::Mat(3, 1, CV_64F);
+    topPointMat.at<double>(0, 0) = slicePosition;
+    topPointMat.at<double>(1, 0) = 0.0;
+    topPointMat.at<double>(2, 0) = 1.0;
+    const cv::Mat topPointCv = homographyInverse * topPointMat;
+    const cv::Mat topPointNormalizedCv = topPointCv / topPointCv.at<double>(0,2);
+    
+    cv::Mat bottomPointMat = cv::Mat(3, 1, CV_64F);
+    bottomPointMat.at<double>(0, 0) = slicePosition;
+    bottomPointMat.at<double>(1, 0) = 1.0;
+    bottomPointMat.at<double>(2, 0) = 1.0;
+    const cv::Mat bottomPointCv = homographyInverse * bottomPointMat;
+    const cv::Mat bottomPointNormalizedCv = bottomPointCv / bottomPointCv.at<double>(0,2);
+    
+    QLineF pb(QPointF(topPointNormalizedCv.at<double>(0,0), topPointNormalizedCv.at<double>(0,1)),
+              QPointF(bottomPointNormalizedCv.at<double>(0,0), bottomPointNormalizedCv.at<double>(0,1)));
+    
+    return pb;
+}
 QVector<QPointF> MainWindow::sortedRectanglePoints(const QVector<QPointF>& inPoints)
 {
     // Get the points' centroid
@@ -430,4 +449,36 @@ QVector<QPointF> MainWindow::sortedRectanglePoints(const QVector<QPointF>& inPoi
     
     return results;
 }
+
+
+qreal MainWindow::linePointDistance(const QLineF& line, const QPointF& point)
+{
+    const qreal A = point.x() - line.p1().x();
+    const qreal B = point.y() - line.p1().y();
+    const qreal C = line.p2().x() - line.p1().x();
+    const qreal D = line.p2().y() - line.p1().y();
+    
+    const qreal dot = A * C + B * D;
+    const qreal len_sq = C * C + D * D;
+    const qreal param = dot / len_sq;
+    
+    QPointF result;
+    if(param < 0)
+    {
+        result = line.p1();
+    }
+    else if(param > 1)
+    {
+        result = line.p2();
+    }
+    else
+    {
+        result.setX(line.p1().x() + param * C);
+        result.setY(line.p1().y() + param * D);
+    }
+     
+    const qreal dist = (point - result).manhattanLength();
+    return dist;
+}
+
 

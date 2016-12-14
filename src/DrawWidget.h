@@ -20,10 +20,11 @@ public:
     QSize sizeHint() const Q_DECL_OVERRIDE;
     QSize minimumSizeHint() const Q_DECL_OVERRIDE;
 
-    bool setImagePointer(const QImage* image);
-    bool setCircleCoordsPointer(const QVector<QPointF>* points);
-    bool setConvexPolyPointer(const QVector<QPolygonF>* polys);
-    bool setLinesPointer(const QVector<QLineF>* lines);
+    bool setImagePointer(const QImage* image) { m_qImage = image; }
+    bool setCircleCoordsPointer(const QVector<QPointF>* points) { m_circleCoords = points; }
+    bool setConvexPolyPointer(const QVector<QPolygonF>* polys) { m_convexPolygons = polys; }
+    bool setLinesPointer(const QVector<QLineF>* lines) { m_lines = lines; }
+    bool setLineColorsPointer(const QVector<QColor>* lineColors) { m_lineColors = lineColors; }
     
     void centerImage(const bool& refresh=true);
     void scaleImageToViewport(const bool& refresh=true);
@@ -48,6 +49,7 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) Q_DECL_OVERRIDE;
 
 protected slots:
+    // Default implementations of a few signals
     void imagePanStart(const QPointF& position);
     void imagePanDrag(const QPointF& position);
     
@@ -57,6 +59,7 @@ private:
     const QVector<QPointF>* m_circleCoords;
     const QVector<QPolygonF>* m_convexPolygons;
     const QVector<QLineF>* m_lines;
+    const QVector<QColor>* m_lineColors;
     
     // Mouse movement
     QPointF m_lastPos;

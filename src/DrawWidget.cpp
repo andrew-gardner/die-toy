@@ -11,6 +11,7 @@ DrawWidget::DrawWidget(QWidget* parent)
     , m_circleCoords(NULL)
     , m_convexPolygons(NULL)
     , m_lines(NULL)
+    , m_lineColors(NULL)
     , m_lastPos(0, 0)
     , m_currentPos(0, 0)
     , m_zoomFactor(1.0)
@@ -40,30 +41,6 @@ QSize DrawWidget::sizeHint() const
 QSize DrawWidget::minimumSizeHint() const
 {
     return QSize(200, 200);
-}
-
-
-bool DrawWidget::setImagePointer(const QImage* image)
-{
-    m_qImage = image;
-}
-
-
-bool DrawWidget::setCircleCoordsPointer(const QVector<QPointF>* points)
-{
-    m_circleCoords = points;
-}
-
-
-bool DrawWidget::setConvexPolyPointer(const QVector<QPolygonF>* polys)
-{
-    m_convexPolygons = polys;
-}
-
-
-bool DrawWidget::setLinesPointer(const QVector<QLineF>* lines)
-{
-    m_lines = lines;
 }
 
 
@@ -145,6 +122,11 @@ void DrawWidget::paintEvent(QPaintEvent* event)
         
         for (int i = 0; i < m_lines->size(); i++)
         {
+            if (m_lineColors && m_lineColors->size() > i)
+            {
+                painter.setPen((*m_lineColors)[i]);
+            }
+            
             painter.drawLine((*m_lines)[i]);
         }
     }
