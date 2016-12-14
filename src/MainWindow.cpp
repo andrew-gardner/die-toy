@@ -10,6 +10,7 @@
 #include <QFileDialog>
 #include <QJsonObject>
 #include <QApplication>
+#include <QtAlgorithms>
 #include <QJsonDocument>
 
 //
@@ -19,7 +20,6 @@
 // * Convert everything to Qt undo command structure
 // * Menu bar & menu items
 // * Status bar
-// * Display bit regions as circles or something
 // * A view to see an enlarged version of the current bit region
 // * Drag slice lines
 // * Select multiple slice lines with a drag
@@ -30,6 +30,9 @@
 // * Export all bit regions to new image(s)
 // * A range placement option - put start, put end, fill with X between
 // * DrawWidget image chunking for clipping potential
+// * Wrap my head further around what can be easily cleaned up as visual stuff
+// * Convert the inefficient vectors to linked lists where necessary
+// * Sort the vectors in various places other than just the bit creator
 // 
 
 
@@ -361,6 +364,11 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
         if (filename != "")
             saveDescriptionJson(filename);
     }
+    else if (ctrlHeld && event->key() == Qt::Key_E)
+    {
+        // Save all bit locations as a condensend image
+        
+    }
     else if (ctrlHeld && event->key() == Qt::Key_B)
     {
         // TODO: Give me back my CTRL+C, you mean ole' GUI widget!
@@ -390,9 +398,12 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
     {
         m_uiMode = Navigation;
         QApplication::setOverrideCursor(Qt::ArrowCursor);
+        m_drawWidget.setConvexPolyPointer(&m_boundsPolygons);
+        m_drawWidget.setCircleCoordsPointer(&m_boundsPoints);
         disconnect(m_lmbClickedConnection);
         disconnect(m_lmbDraggedConnection);
         disconnect(m_lmbReleasedConnection);
+        m_drawWidget.update();
     }
     else if (event->key() == Qt::Key_1)
     {
@@ -401,9 +412,12 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
         disconnect(m_lmbClickedConnection);
         disconnect(m_lmbDraggedConnection);
         disconnect(m_lmbReleasedConnection);
+        m_drawWidget.setConvexPolyPointer(&m_boundsPolygons);
+        m_drawWidget.setCircleCoordsPointer(&m_boundsPoints);
         m_lmbClickedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonClicked, this, &MainWindow::addOrMoveBoundsPoint);
         m_lmbDraggedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonDragged, this, &MainWindow::dragBoundsPoint);
         m_lmbReleasedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonReleased, this, &MainWindow::stopDraggingBoundsPoint);
+        m_drawWidget.update();
     }
     else if (event->key() == Qt::Key_2)
     {
@@ -412,6 +426,8 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
         disconnect(m_lmbClickedConnection);
         disconnect(m_lmbDraggedConnection);
         disconnect(m_lmbReleasedConnection);
+        m_drawWidget.setConvexPolyPointer(&m_boundsPolygons);
+        m_drawWidget.setCircleCoordsPointer(&m_boundsPoints);
         m_lmbClickedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonClicked, this, &MainWindow::addOrMoveSlice);
         recomputeSliceLinesFromHomography();
         m_drawWidget.update();
@@ -423,6 +439,8 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
         disconnect(m_lmbClickedConnection);
         disconnect(m_lmbDraggedConnection);
         disconnect(m_lmbReleasedConnection);
+        m_drawWidget.setConvexPolyPointer(&m_boundsPolygons);
+        m_drawWidget.setCircleCoordsPointer(&m_boundsPoints);
         m_lmbClickedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonClicked, this, &MainWindow::addOrMoveSlice);
         recomputeSliceLinesFromHomography();
         m_drawWidget.update();
@@ -435,23 +453,11 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
         disconnect(m_lmbDraggedConnection);
         disconnect(m_lmbReleasedConnection);
         
-        m_sliceLines.clear();       // TODO: make a delete visual stuff function
+        m_sliceLines.clear();
         m_sliceLineColors.clear();
         m_drawWidget.setConvexPolyPointer(NULL);
         m_drawWidget.setCircleCoordsPointer(&m_bitLocations);
-        
-        for (int h = 0; h < m_horizSlices.size(); h++)
-        {
-            const QLineF hLine = slicePositionToLine(m_horizSlices[h], SliceDefineHorizontal);
-            for (int v = 0; v < m_vertSlices.size(); v++)
-            {
-                const QLineF vLine = slicePositionToLine(m_vertSlices[v], SliceDefineVertical);
-                
-                QPointF intersection;
-                hLine.intersect(vLine, &intersection);
-                m_bitLocations.push_back(intersection);
-            }
-        }
+        m_bitLocations = computeBitLocations();
         
         m_drawWidget.update();
     }
@@ -553,6 +559,64 @@ void MainWindow::recomputeSliceLinesFromHomography()
                 m_sliceLineColors.push_back(QColor(0, 0, 255));
         }
     }
+}
+
+
+QVector<QPointF> MainWindow::computeBitLocations()
+{
+    // Sort the vectors
+    qSort(m_horizSlices);
+    qSort(m_vertSlices);
+    
+    // Returns a list of image-space points representing where the bits are
+    // These are created in standard image scanline-order (top=[0,0], left->right)
+    QVector<QPointF> results;
+
+    // Top line of bits
+    results.push_back(m_boundsPoints[0]);
+    for (int x = 0; x < m_horizSlices.size(); x++)
+    {
+        const QLineF hLine = slicePositionToLine(m_horizSlices[x], SliceDefineHorizontal);
+        results.push_back(hLine.p1());
+    }
+    results.push_back(m_boundsPoints[1]);
+
+    // The bulk of the bits
+    for (int y = 0; y < m_vertSlices.size(); y++)
+    {
+        const QLineF vLine = slicePositionToLine(m_vertSlices[y], SliceDefineVertical);
+        for (int x = -1; x <= m_horizSlices.size(); x++)
+        {
+            const QLineF hLine = slicePositionToLine(m_horizSlices[x], SliceDefineHorizontal);
+            
+            QPointF pusher;
+            if (x == -1)
+            {
+                pusher = vLine.p1();
+            }
+            else if (x == m_horizSlices.size())
+            {
+                pusher = vLine.p2();
+            }
+            else
+            {
+                hLine.intersect(vLine, &pusher);
+            }
+            
+            results.push_back(pusher);
+        }
+    }
+    
+    // Bottom line of bits
+    results.push_back(m_boundsPoints[3]);
+    for (int x = 0; x < m_horizSlices.size(); x++)
+    {
+        const QLineF hLine = slicePositionToLine(m_horizSlices[x], SliceDefineHorizontal);
+        results.push_back(hLine.p2());
+    }
+    results.push_back(m_boundsPoints[2]);
+    
+    return results;
 }
 
 

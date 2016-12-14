@@ -45,6 +45,8 @@ private:
     void deleteSelectedSlices();
     void recomputeSliceLinesFromHomography();
     
+    QVector<QPointF> computeBitLocations();
+    
     QLineF slicePositionToLine(const qreal& slicePosition, const UiMode& hv);
     QVector<QPointF> sortedRectanglePoints(const QVector<QPointF>& inPoints);
     qreal linePointDistance(const QLineF& line, const QPointF& point);
