@@ -207,29 +207,19 @@ void MainWindow::dragBoundsPoint(const QPointF& position)
     if (m_activeBoundsPoint < 0)
         return;
     
+    m_boundsPoints[m_activeBoundsPoint] = position;
     if (m_boundsPoints.size() == 4)
     {
         computePolyAndHomography();
         recomputeLinesFromHomography();
     }
     
-    m_boundsPoints[m_activeBoundsPoint] = position;
     m_drawWidget.update();
 }
 
 
 void MainWindow::stopDraggingBoundsPoint(const QPointF& position)
 {
-    if (m_activeBoundsPoint < 0)
-        return;
-    
-    if (m_boundsPoints.size() == 4)
-    {
-        computePolyAndHomography();
-        recomputeLinesFromHomography();
-    }
-    
-    m_boundsPoints[m_activeBoundsPoint] = position;
     m_activeBoundsPoint = -1;
 }
 
@@ -332,6 +322,27 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
         //m_lmbDraggedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonDragged, this, &MainWindow::dragBoundsPoint);
         //m_lmbReleasedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonReleased, this, &MainWindow::stopDraggingBoundsPoint);
     }
+    else if (event->key() == Qt::Key_Delete)
+    {
+        // TODO: Super-inefficient
+        QVector<QLineF> newLines;
+        QVector<QColor> newColors;
+        QVector<qreal> newHorizSlices;
+        for (int i = 0; i < m_sliceLines.size(); i++)
+        {
+            if (!m_activeSliceLines.contains(i))
+            {
+                newLines.push_back(m_sliceLines[i]);
+                newColors.push_back(QColor(0, 0, 255));
+                newHorizSlices.push_back(m_horizSlices[i]);
+            }
+        }
+        m_sliceLines = newLines;
+        m_sliceLineColors = newColors;
+        m_horizSlices = newHorizSlices;
+        m_activeSliceLines.clear();
+        m_drawWidget.update();            
+    }
     else
     {
         // We're not interested in the keypress?  Pass it up the inheritance chain
@@ -384,7 +395,7 @@ void MainWindow::recomputeLinesFromHomography()
         // Compute the points for the visible line
         QLineF pb = slicePositionToLine(horizSlicePoint);
         m_sliceLines.push_back(pb);
-        if (m_activeSliceLines.contains(i))
+        if (m_activeSliceLines.contains(i)) // TODO: Inefficient
             m_sliceLineColors.push_back(QColor(255, 255, 0));
         else
             m_sliceLineColors.push_back(QColor(0, 0, 255));
@@ -414,6 +425,8 @@ QLineF MainWindow::slicePositionToLine(const qreal& slicePosition)
     
     return pb;
 }
+
+
 QVector<QPointF> MainWindow::sortedRectanglePoints(const QVector<QPointF>& inPoints)
 {
     // Get the points' centroid
