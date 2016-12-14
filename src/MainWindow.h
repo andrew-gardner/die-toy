@@ -35,11 +35,11 @@ protected:
     void keyPressEvent(QKeyEvent* event) Q_DECL_OVERRIDE;
     
 private:
-    // TODO: Some of these are a bit too 'internal' for me
+    void clearBoundsGeometry();
+    void computeBoundsPolyAndHomography();
+
     void deleteSelectedSlices();
-    void clearGeneratedGeometry();
-    void computePolyAndHomography();
-    void recomputeLinesFromHomography();
+    void recomputeSliceLinesFromHomography();
     
     QLineF slicePositionToLine(const qreal& slicePosition);
     QVector<QPointF> sortedRectanglePoints(const QVector<QPointF>& inPoints);
@@ -49,20 +49,27 @@ private:
     UiMode m_uiMode;
     DrawWidget m_drawWidget;
     
+    // The full die image displayed
     QImage m_qImage;
     
+    // ROM die region markers and the geometry that they create
     int m_activeBoundsPoint;
     QVector<QPointF> m_boundsPoints;
     QVector<QPolygonF> m_boundsPolygons;
-    
-    QVector<qreal> m_horizSlices;
-    QVector<QLineF> m_sliceLines;
-    QVector<int> m_activeSliceLines;
-    QVector<QColor> m_sliceLineColors;
-    QVector<qreal> m_copiedSliceOffsets;
-    
     cv::Mat m_romRegionHomography;
     
+    // Horizontal slices in the ROM die
+    QVector<qreal> m_horizSlices;
+    QVector<int> m_activeHorizSlices;
+
+    // Generated data used solely for display
+    QVector<QLineF> m_sliceLines;
+    QVector<QColor> m_sliceLineColors;
+
+    // A copy buffer for ctrl+C | ctrl+V
+    QVector<qreal> m_copiedSliceOffsets;
+    
+    // Signal/slot connection tracking
     QMetaObject::Connection m_lmbClickedConnection;
     QMetaObject::Connection m_lmbDraggedConnection;
     QMetaObject::Connection m_lmbReleasedConnection;
