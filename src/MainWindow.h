@@ -47,12 +47,15 @@ private:
     void deleteSelectedSlices();
     void recomputeSliceLinesFromHomography();
     
+    void exportBitsToImage(const QString& filename);
+    
     QVector<QPointF> computeBitLocations();
     
     qreal romDieSpaceFromImagePoint(const QPointF& iPoint, const UiMode& hv);
     QLineF slicePositionToLine(const qreal& slicePosition, const UiMode& hv);
     QVector<QPointF> sortedRectanglePoints(const QVector<QPointF>& inPoints);
     qreal linePointDistance(const QLineF& line, const QPointF& point);
+    QColor qImageBilinear(const QImage& image, const QPointF& pixelCoord);
     
 private:
     UiMode m_uiMode;

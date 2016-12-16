@@ -408,7 +408,10 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
     else if (ctrlHeld && event->key() == Qt::Key_E)
     {
         // Save all bit locations as a condensend image
-        
+        if (m_uiMode == BitRegionDisplay)
+        {
+            exportBitsToImage("/tmp/test.png");
+        }
     }
     else if (ctrlHeld && event->key() == Qt::Key_D)
     {
@@ -529,8 +532,8 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
         m_sliceLines.clear();
         m_sliceLineColors.clear();
         m_drawWidget.setConvexPolyPointer(NULL);
-        m_drawWidget.setCircleCoordsPointer(&m_bitLocations);
         m_bitLocations = computeBitLocations();
+        m_drawWidget.setCircleCoordsPointer(&m_bitLocations);
         
         m_drawWidget.update();
     }
@@ -632,6 +635,18 @@ void MainWindow::recomputeSliceLinesFromHomography()
                 m_sliceLineColors.push_back(QColor(0, 0, 255));
         }
     }
+}
+
+
+void MainWindow::exportBitsToImage(const QString& filename)
+{
+    // TODO: Didn't have the time to finish this one
+    const int radius = 6;
+
+    QSize resultImageSize((radius*2+1) * m_bitLocations.size(), radius*2);
+    QImage result(resultImageSize, QImage::Format_RGB32);
+
+    result.save(filename);
 }
 
 
@@ -804,3 +819,37 @@ qreal MainWindow::linePointDistance(const QLineF& line, const QPointF& point)
 }
 
 
+QColor MainWindow::qImageBilinear(const QImage& image, const QPointF& pixelCoord)
+{
+    // Some constants
+    const int w = image.width();
+    const int h = image.height();
+    const qreal x = pixelCoord.x();
+    const qreal y = pixelCoord.y();
+
+    // Get the top and bottom coordinates
+    const int x1 = static_cast<int>(floor(x));
+    const int y1 = static_cast<int>(floor(y));
+    const int x2 = x1 + 1;
+    const int y2 = y1 + 1;
+
+    // Boundary conditions
+    if (x2 >= w || y2 >= h) return image.pixel(x1, y1);
+    if (x1 < 0  || y1 < 0)  return QColor(0, 0, 0);
+    
+    // Pixel samples
+    const QColor ltop = image.pixel(x1, y1);
+    const QColor rtop = image.pixel(x1, y2);
+    const QColor lbot = image.pixel(x2, y1);
+    const QColor rbot = image.pixel(x2, y2);
+
+    // Blerp for great success
+    QColor result;
+    result.setRed  (((x2 - x) * (y2 - y) * ltop.redF()   + (x2 - x) * (y - y1) * rtop.redF() + 
+                     (x - x1) * (y2 - y) * lbot.redF()   + (x - x1) * (y - y1) * rbot.redF()) * 255.0);
+    result.setGreen(((x2 - x) * (y2 - y) * ltop.greenF() + (x2 - x) * (y - y1) * rtop.greenF() + 
+                     (x - x1) * (y2 - y) * lbot.greenF() + (x - x1) * (y - y1) * rbot.greenF()) * 255.0);
+    result.setBlue (((x2 - x) * (y2 - y) * ltop.blueF()  + (x2 - x) * (y - y1) * rtop.blueF() + 
+                     (x - x1) * (y2 - y) * lbot.blueF()  + (x - x1) * (y - y1) * rbot.blueF()) * 255.0);
+    return result;
+}
