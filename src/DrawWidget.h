@@ -29,6 +29,9 @@ public:
     void centerImage(const bool& refresh=true);
     void scaleImageToViewport(const bool& refresh=true);
     
+    QPointF image2Window(const QPointF& image);
+    QPointF window2Image(const QPointF& window);
+    
 signals:
     void leftButtonClicked(const QPointF& position);
     void leftButtonDragged(const QPointF& position);
@@ -66,8 +69,6 @@ private:
     QPointF m_currentPos;
     qreal m_zoomFactor;
     QPointF m_imageLoc;
-    QPointF image2Window(const QPointF& image);
-    QPointF window2Image(const QPointF& window);
 };
 
 

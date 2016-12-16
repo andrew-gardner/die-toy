@@ -71,6 +71,18 @@ void DrawWidget::scaleImageToViewport(const bool& refresh)
 }
 
 
+QPointF DrawWidget::image2Window(const QPointF& image)
+{
+    return m_imageLoc + (image * m_zoomFactor);
+}
+
+
+QPointF DrawWidget::window2Image(const QPointF& window)
+{
+    return (window - m_imageLoc) / m_zoomFactor;
+}
+
+
 
 /// QWidget events ////////////////////////////////////////////////////////////
 
@@ -268,19 +280,4 @@ void DrawWidget::imagePanDrag(const QPointF& position)
 
     m_lastPos = position;
     update();
-}
-
-
-
-/// Private ///////////////////////////////////////////////////////////////////
-
-QPointF DrawWidget::image2Window(const QPointF& image)
-{
-    return m_imageLoc + (image * m_zoomFactor);
-}
-
-
-QPointF DrawWidget::window2Image(const QPointF& window)
-{
-    return (window - m_imageLoc) / m_zoomFactor;
 }

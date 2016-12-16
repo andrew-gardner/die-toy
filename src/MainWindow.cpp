@@ -17,23 +17,21 @@
 // TODO list
 // ---------
 //
-// * Convert everything to Qt undo command structure
-// * Menu bar & menu items
 // * Status bar
+// * Menu bar & menu items
+// * Convert everything to Qt undo command structure
 // * A view to see an enlarged version of the current bit region
 // * Drag slice lines
-// * Select multiple slice lines with a drag
 // * A single click adds both a horizontal and vertical slice line
-// * Come up with a better way to paste (interactively, likely)
-// * A paste-at option - paste the selecte things right where the mouse is
-// * Sorting with copy/paste (instead of taking offset order)
+// * Flesh out more ways to paste (paste as an offset of last line, etc)
 // * Export all bit regions to new image(s)
 // * A range placement option - put start, put end, fill with X between
 // * DrawWidget image chunking for clipping potential
 // * Wrap my head further around what can be easily cleaned up as visual stuff
 // * Convert the inefficient vectors to linked lists where necessary
 // * Sort the vectors in various places other than just the bit creator
-// 
+// * The diameter doesn't scale in the DrawWidget point clipping
+//
 
 
 MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
@@ -54,6 +52,8 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
     , m_lmbClickedConnection()
     , m_lmbDraggedConnection()
     , m_lmbReleasedConnection()
+    , m_rmbClickedConnection()
+    , m_rmbDraggedConnection()
 {
     // Set the draw widget to be central and make sure it can receive focus via the mouse
     setCentralWidget(&m_drawWidget);
@@ -297,6 +297,27 @@ void MainWindow::addOrMoveSlice(const QPointF& position)
     
     // Switch the slice we're operating on based on the current ui mode
     QVector<qreal>& slices = (m_uiMode == SliceDefineHorizontal) ? m_horizSlices : m_vertSlices;
+
+    // Convert the image-space position into ROM-die-space using the homography
+    slices.push_back(romDieSpaceFromImagePoint(position, m_uiMode));
+
+    recomputeSliceLinesFromHomography();
+    m_drawWidget.update();
+}
+
+
+void MainWindow::selectSlice(const QPointF& position)
+{
+    // You can only add a slice if there's a bounds poly
+    if (m_boundsPolygons.size() == 0)
+        return;
+    
+    // You can only do something by clicking side the bounds poly
+    if (!m_boundsPolygons[0].containsPoint(position, Qt::OddEvenFill))
+        return;
+    
+    // Switch the slice we're operating on based on the current ui mode
+    QVector<qreal>& slices = (m_uiMode == SliceDefineHorizontal) ? m_horizSlices : m_vertSlices;
     
     // First check to see if a current slice line is close (you're selecting instead of adding a new)
     for (int i = 0; i < slices.size(); i++)
@@ -311,30 +332,50 @@ void MainWindow::addOrMoveSlice(const QPointF& position)
                 m_activeSlices.remove(alreadySelected);
             else
                 m_activeSlices.push_back(i);
+            
+            qSort(m_activeSlices);
+            
             recomputeSliceLinesFromHomography();
             m_drawWidget.update();
             return;
         }
     }
+}
 
-    // If you did't select anything, you must want to clear the selection
-    m_activeSlices.clear();
-    
-    // Convert the image-space position into ROM-die-space using the homography
-    cv::Mat pointMat = cv::Mat(3, 1, CV_64F);
-    pointMat.at<double>(0, 0) = position.x();
-    pointMat.at<double>(1, 0) = position.y();
-    pointMat.at<double>(2, 0) = 1.0;
-    
-    // Compute image point to ROM die space
-    const cv::Mat originPointCv = m_romRegionHomography * pointMat;
-    const cv::Mat originPointNormalizedCv = originPointCv / originPointCv.at<double>(0,2);
-    const QPointF romDiePoint(originPointNormalizedCv.at<double>(0,0), originPointNormalizedCv.at<double>(0,1));
-    const qreal pushPoint = (m_uiMode == SliceDefineHorizontal) ? romDiePoint.x() : romDiePoint.y();
-    slices.push_back(pushPoint);
 
-    recomputeSliceLinesFromHomography();
-    m_drawWidget.update();
+void MainWindow::selectMoreSlices(const QPointF& position)
+{
+    // You can only add a slice if there's a bounds poly
+    if (m_boundsPolygons.size() == 0)
+        return;
+    
+    // You can only do something by clicking side the bounds poly
+    if (!m_boundsPolygons[0].containsPoint(position, Qt::OddEvenFill))
+        return;
+    
+    // Switch the slice we're operating on based on the current ui mode
+    QVector<qreal>& slices = (m_uiMode == SliceDefineHorizontal) ? m_horizSlices : m_vertSlices;
+    
+    // First check to see if a current slice line is close (you're selecting instead of adding a new)
+    for (int i = 0; i < slices.size(); i++)
+    {
+        // TODO: Scale selection distance based on drawWidget zoom factor
+        const qreal distance = linePointDistance(slicePositionToLine(slices[i], m_uiMode), position);
+        if (distance < 5.0f)
+        {
+            // TODO: inefficient
+            if (!m_activeSlices.contains(i))
+                m_activeSlices.push_back(i);
+            else
+                return;
+            
+            qSort(m_activeSlices);
+            
+            recomputeSliceLinesFromHomography();
+            m_drawWidget.update();
+            return;
+        }
+    }
 }
 
 
@@ -369,10 +410,17 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
         // Save all bit locations as a condensend image
         
     }
+    else if (ctrlHeld && event->key() == Qt::Key_D)
+    {
+        // Deselect all slices
+        m_activeSlices.clear();
+        recomputeSliceLinesFromHomography();
+        m_drawWidget.update();
+    }
     else if (ctrlHeld && event->key() == Qt::Key_B)
     {
-        // TODO: Give me back my CTRL+C, you mean ole' GUI widget!
         // Copy selected slice offsets
+        // TODO: Give me back my CTRL+C, you mean ole' GUI widget!  (this will be fixed when everything is menu-ized)
         m_copiedSliceOffsets.clear();
         QVector<qreal>& slices = (m_uiMode == SliceDefineHorizontal) ? m_horizSlices : m_vertSlices;
         for (int i = 0; i < m_activeSlices.size(); i++)
@@ -384,12 +432,22 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
     }
     else if (ctrlHeld && event->key() == Qt::Key_V)
     {
-        // Paste selected slice offsets after the last slice
+        // Paste selected slice offsets right where the mouse is
         QVector<qreal>& slices = (m_uiMode == SliceDefineHorizontal) ? m_horizSlices : m_vertSlices;
+        const QPointF mouseImagePosition = m_drawWidget.window2Image(m_drawWidget.mapFromGlobal(QCursor::pos()));
+        const qreal pushOffset = romDieSpaceFromImagePoint(mouseImagePosition, m_uiMode);
+        
+        qreal runningSum = pushOffset;
         for (int i = 0; i < m_copiedSliceOffsets.size(); i++)
         {
-            const qreal& lastSlicePosition = slices.back();
-            slices.push_back(lastSlicePosition + m_copiedSliceOffsets[i]);
+            // The first slice has no offset with this method of pasting (it appears right where the mouse is)
+            const qreal offset = (i == 0) ? 0.0 : m_copiedSliceOffsets[i];
+            
+            if (runningSum + offset >= 1.0)
+                continue;
+            
+            slices.push_back(runningSum + offset);
+            runningSum += offset;
         }
         recomputeSliceLinesFromHomography();
         m_drawWidget.update();
@@ -403,6 +461,8 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
         disconnect(m_lmbClickedConnection);
         disconnect(m_lmbDraggedConnection);
         disconnect(m_lmbReleasedConnection);
+        disconnect(m_rmbClickedConnection);
+        disconnect(m_rmbDraggedConnection);
         m_drawWidget.update();
     }
     else if (event->key() == Qt::Key_1)
@@ -412,6 +472,8 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
         disconnect(m_lmbClickedConnection);
         disconnect(m_lmbDraggedConnection);
         disconnect(m_lmbReleasedConnection);
+        disconnect(m_rmbClickedConnection);
+        disconnect(m_rmbDraggedConnection);
         m_drawWidget.setConvexPolyPointer(&m_boundsPolygons);
         m_drawWidget.setCircleCoordsPointer(&m_boundsPoints);
         m_lmbClickedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonClicked, this, &MainWindow::addOrMoveBoundsPoint);
@@ -426,9 +488,14 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
         disconnect(m_lmbClickedConnection);
         disconnect(m_lmbDraggedConnection);
         disconnect(m_lmbReleasedConnection);
+        disconnect(m_rmbClickedConnection);
+        disconnect(m_rmbDraggedConnection);
         m_drawWidget.setConvexPolyPointer(&m_boundsPolygons);
         m_drawWidget.setCircleCoordsPointer(&m_boundsPoints);
         m_lmbClickedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonClicked, this, &MainWindow::addOrMoveSlice);
+        m_rmbClickedConnection = connect(&m_drawWidget, &DrawWidget::rightButtonClicked, this, &MainWindow::selectSlice);
+        m_rmbDraggedConnection = connect(&m_drawWidget, &DrawWidget::rightButtonDragged, this, &MainWindow::selectMoreSlices);
+        m_activeSlices.clear();
         recomputeSliceLinesFromHomography();
         m_drawWidget.update();
     }
@@ -439,9 +506,14 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
         disconnect(m_lmbClickedConnection);
         disconnect(m_lmbDraggedConnection);
         disconnect(m_lmbReleasedConnection);
+        disconnect(m_rmbClickedConnection);
+        disconnect(m_rmbDraggedConnection);
         m_drawWidget.setConvexPolyPointer(&m_boundsPolygons);
         m_drawWidget.setCircleCoordsPointer(&m_boundsPoints);
         m_lmbClickedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonClicked, this, &MainWindow::addOrMoveSlice);
+        m_rmbClickedConnection = connect(&m_drawWidget, &DrawWidget::rightButtonClicked, this, &MainWindow::selectSlice);
+        m_rmbDraggedConnection = connect(&m_drawWidget, &DrawWidget::rightButtonDragged, this, &MainWindow::selectMoreSlices);
+        m_activeSlices.clear();
         recomputeSliceLinesFromHomography();
         m_drawWidget.update();
     }
@@ -452,6 +524,7 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
         disconnect(m_lmbClickedConnection);
         disconnect(m_lmbDraggedConnection);
         disconnect(m_lmbReleasedConnection);
+        disconnect(m_rmbClickedConnection);
         
         m_sliceLines.clear();
         m_sliceLineColors.clear();
@@ -617,6 +690,22 @@ QVector<QPointF> MainWindow::computeBitLocations()
     results.push_back(m_boundsPoints[2]);
     
     return results;
+}
+
+
+qreal MainWindow::romDieSpaceFromImagePoint(const QPointF& iPoint, const UiMode& hv)
+{
+    cv::Mat pointMat = cv::Mat(3, 1, CV_64F);
+    pointMat.at<double>(0, 0) = iPoint.x();
+    pointMat.at<double>(1, 0) = iPoint.y();
+    pointMat.at<double>(2, 0) = 1.0;
+    
+    // Compute image point to ROM die space
+    const cv::Mat originPointCv = m_romRegionHomography * pointMat;
+    const cv::Mat originPointNormalizedCv = originPointCv / originPointCv.at<double>(0,2);
+    const QPointF romDiePoint(originPointNormalizedCv.at<double>(0,0), originPointNormalizedCv.at<double>(0,1));
+    const qreal pushPoint = (hv == SliceDefineHorizontal) ? romDiePoint.x() : romDiePoint.y();
+    return pushPoint;
 }
 
 

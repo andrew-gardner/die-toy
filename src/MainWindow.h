@@ -25,7 +25,9 @@ public:
     void stopDraggingBoundsPoint(const QPointF& position);
 
     void addOrMoveSlice(const QPointF& position);
-    //void dragSlice(const QPointF& position);
+    
+    void selectSlice(const QPointF& position);
+    void selectMoreSlices(const QPointF& position);
     //void stopDraggingSlice(const QPointF& position);
     
     enum UiMode { Navigation, 
@@ -47,6 +49,7 @@ private:
     
     QVector<QPointF> computeBitLocations();
     
+    qreal romDieSpaceFromImagePoint(const QPointF& iPoint, const UiMode& hv);
     QLineF slicePositionToLine(const qreal& slicePosition, const UiMode& hv);
     QVector<QPointF> sortedRectanglePoints(const QVector<QPointF>& inPoints);
     qreal linePointDistance(const QLineF& line, const QPointF& point);
@@ -85,6 +88,9 @@ private:
     QMetaObject::Connection m_lmbClickedConnection;
     QMetaObject::Connection m_lmbDraggedConnection;
     QMetaObject::Connection m_lmbReleasedConnection;
+    
+    QMetaObject::Connection m_rmbClickedConnection;
+    QMetaObject::Connection m_rmbDraggedConnection;
 };
 
 #endif // DIETOY_MAIN_WINDOW_H
