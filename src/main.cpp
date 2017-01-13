@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 
+#include <QDebug>
 #include <QApplication>
 #include <QDesktopWidget>
 #include <QCommandLineParser>
@@ -47,12 +48,25 @@ int main(int argc, char *argv[])
     win.move(position);
     win.show();
 
+    
     // Now that the show() message has been called, tell the window all about the commandline
     if (dieImageFilename != "")
-        win.loadImage(dieImageFilename);
-    
+    {
+        const bool success = win.loadImage(dieImageFilename);
+        if (!success)
+        {
+            qWarning() << "Unable to image file " << dieDescriptionFilename;
+        }
+        
+    }
     if (dieDescriptionFilename != "")
-        win.loadDescriptionJson(dieDescriptionFilename);
+    {
+        const bool success = win.loadDescriptionJson(dieDescriptionFilename);
+        if (!success)
+        {
+            qWarning() << "Unable to load die description file " << dieDescriptionFilename;
+        }
+    }
     
     
     return app.exec();
