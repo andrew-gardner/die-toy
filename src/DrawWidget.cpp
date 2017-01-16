@@ -44,7 +44,7 @@ QSize DrawWidget::minimumSizeHint() const
 }
 
 
-void DrawWidget::centerImage(const bool& refresh)
+void DrawWidget::centerImage()
 {
     if (m_qImage == NULL)
         return;
@@ -53,21 +53,35 @@ void DrawWidget::centerImage(const bool& refresh)
     m_imageLoc.setX(foo.width());
     m_imageLoc.setY(foo.height());
     
-    if (refresh) update();
+    update();
 }
 
 
-void DrawWidget::scaleImageToViewport(const bool& refresh)
+void DrawWidget::scaleImageToViewport()
 {
     if (m_qImage == NULL)
         return;
     
-    if (m_qImage->size().width() < m_qImage->size().height())
+    if (m_qImage->size().width() > m_qImage->size().height())
         m_zoomFactor = (float)width() / (float)m_qImage->size().width();
     else
         m_zoomFactor = (float)height() / (float)m_qImage->size().height();
     
-    if (refresh) update();
+    update();
+}
+
+
+void DrawWidget::frameImage()
+{
+    scaleImageToViewport();
+    centerImage();
+}
+
+
+void DrawWidget::resetImage()
+{
+    m_zoomFactor = 1.0f;
+    centerImage();
 }
 
 
@@ -174,31 +188,6 @@ void DrawWidget::wheelEvent(QWheelEvent* event)
     m_imageLoc = event->pos() - (b * m_zoomFactor);
 
     update();
-}
-
-
-void DrawWidget::keyPressEvent(QKeyEvent* event)
-{
-    if (event->key() == Qt::Key_C)
-    {
-        centerImage();
-    }
-    else if (event->key() == Qt::Key_F)
-    {
-        scaleImageToViewport(false);
-        centerImage();
-    }
-    else if (event->key() == Qt::Key_Z)
-    {
-        m_zoomFactor = 1.0f;
-        centerImage(false);
-        update();
-    }
-    else
-    {
-        // We not interested in the keypress?  Pass it up the inheritance chain
-        QWidget::keyPressEvent(event);
-    }
 }
 
 

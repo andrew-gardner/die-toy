@@ -3,6 +3,7 @@
 #include <QDebug>
 #include <QWidget>
 #include <QAction>
+#include <QMenuBar>
 #include <QVector2D>
 #include <QVector3D>
 #include <QKeyEvent>
@@ -18,7 +19,6 @@
 // ---------
 //
 // * Status bar
-// * Menu bar & menu items
 // * Convert everything to Qt undo command structure
 // * A view to see an enlarged version of the current bit region
 // * Drag slice lines
@@ -59,12 +59,6 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
     setCentralWidget(&m_drawWidget);
     m_drawWidget.setFocusPolicy(Qt::ClickFocus);
     
-    // A decent quit keyboard shortcut
-    QAction* quitAct = new QAction(this);
-    quitAct->setShortcuts(QKeySequence::Quit);
-    connect(quitAct, &QAction::triggered, this, &MainWindow::close);
-    addAction(quitAct);
-    
     // Make sure the draw widget is focused when the app loop starts
     m_drawWidget.setFocus();
 
@@ -74,12 +68,331 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
     m_drawWidget.setConvexPolyPointer(&m_boundsPolygons);
     m_drawWidget.setLinesPointer(&m_sliceLines);
     m_drawWidget.setLineColorsPointer(&m_sliceLineColors);
+    
+    createMenu();
 }
 
 
 MainWindow::~MainWindow()
 {
     
+}
+
+
+void MainWindow::createMenu()
+{
+    // Create the file menu actions and menu item
+    QAction* openImageAct = new QAction(tr("Open Die &Image"), this);
+    openImageAct->setShortcuts(QKeySequence::Open);
+    openImageAct->setStatusTip(tr("Open a new die image"));
+    connect(openImageAct, &QAction::triggered, this, &MainWindow::openImage);
+    
+    QAction* openDDFAct = new QAction(tr("Open Die &Description JSON"), this);
+    openDDFAct->setShortcut(QKeySequence(Qt::CTRL + Qt::SHIFT + Qt::Key_O));
+    openDDFAct->setStatusTip(tr("Open a new die description JSON"));
+    connect(openDDFAct, &QAction::triggered, this, &MainWindow::openDieDescription);
+
+    QAction* saveDDFAct = new QAction(tr("&Save Die Description JSON"), this);
+    saveDDFAct->setShortcut(QKeySequence(QKeySequence::Save));
+    saveDDFAct->setStatusTip(tr("Save the current die description JSON"));
+    connect(saveDDFAct, &QAction::triggered, this, &MainWindow::saveDieDescription);
+
+    QAction* exportBitImageAct = new QAction(tr("&Export Bit PNG"), this);
+    exportBitImageAct->setShortcut(QKeySequence(Qt::CTRL + Qt::Key_E));
+    exportBitImageAct->setStatusTip(tr("Export the marked bits to a special bit image PNG"));
+    connect(exportBitImageAct, &QAction::triggered, this, &MainWindow::exportBitImage);
+    
+    QAction* quitAct = new QAction(tr("E&xit"), this);
+    quitAct->setShortcuts(QKeySequence::Quit);
+    connect(quitAct, &QAction::triggered, this, &MainWindow::close);
+
+    QMenu* fileMenu = menuBar()->addMenu(tr("&File"));
+    fileMenu->addAction(openImageAct);
+    fileMenu->addAction(openDDFAct);
+    fileMenu->addAction(saveDDFAct);
+    fileMenu->addAction(exportBitImageAct);
+    fileMenu->addAction(quitAct);
+
+
+    // Create the edit menu actions and menu item
+    QAction* copySlicesAct = new QAction(tr("&Copy slices"), this);
+    copySlicesAct->setShortcut(QKeySequence(QKeySequence::Copy));
+    copySlicesAct->setStatusTip(tr("Copy slices"));
+    connect(copySlicesAct, &QAction::triggered, this, &MainWindow::copySlices);
+
+    QAction* pasteSlicesAct = new QAction(tr("&Paste slices"), this);
+    pasteSlicesAct->setShortcut(QKeySequence(QKeySequence::Paste));
+    pasteSlicesAct->setStatusTip(tr("Paste slices"));
+    connect(pasteSlicesAct, &QAction::triggered, this, &MainWindow::pasteSlices);
+    
+    QAction* deselectSlicesAct = new QAction(tr("&Deselect slices"), this);
+    deselectSlicesAct->setShortcut(QKeySequence(Qt::CTRL + Qt::Key_D));
+    deselectSlicesAct->setStatusTip(tr("Deselect selected slices"));
+    connect(deselectSlicesAct, &QAction::triggered, this, &MainWindow::deselectSlices);
+    
+    QAction* deleteSlicesAct = new QAction(tr("&Delete slices"), this);
+    deleteSlicesAct->setShortcut(QKeySequence(Qt::Key_Delete));
+    deleteSlicesAct->setStatusTip(tr("Delete selected slices"));
+    connect(deleteSlicesAct, &QAction::triggered, this, &MainWindow::deleteSlices);
+    
+    QMenu* editMenu = menuBar()->addMenu(tr("&Edit"));
+    editMenu->addAction(copySlicesAct);
+    editMenu->addAction(pasteSlicesAct);
+    editMenu->addAction(deselectSlicesAct);
+    editMenu->addAction(deleteSlicesAct);
+    
+    
+    // Create the mode menu actions and menu item
+    QAction* modeNaviationAct = new QAction(tr("&Naviation mode"), this);
+    modeNaviationAct->setShortcut(QKeySequence(Qt::Key_1));
+    modeNaviationAct->setStatusTip(tr("Navigate the image and data"));
+    connect(modeNaviationAct, &QAction::triggered, this, &MainWindow::setModeNavigation);
+    modeNaviationAct->setCheckable(true);
+    
+    QAction* modeBoundsDefineAct = new QAction(tr("&Bounds define mode"), this);
+    modeBoundsDefineAct->setShortcut(QKeySequence(Qt::Key_2));
+    modeBoundsDefineAct->setStatusTip(tr("Define ROM die region"));
+    connect(modeBoundsDefineAct, &QAction::triggered, this, &MainWindow::setModeBoundsDefine);
+    modeBoundsDefineAct->setCheckable(true);
+    
+    QAction* modeSliceDefineHorizontalAct = new QAction(tr("Slice define &horizontal mode"), this);
+    modeSliceDefineHorizontalAct->setShortcut(QKeySequence(Qt::Key_3));
+    modeSliceDefineHorizontalAct->setStatusTip(tr("Define horizontal ROM slices"));
+    connect(modeSliceDefineHorizontalAct, &QAction::triggered, this, &MainWindow::setModeSliceDefineHorizontal);
+    modeSliceDefineHorizontalAct->setCheckable(true);
+    
+    QAction* modeSliceDefineVerticalAct = new QAction(tr("Slice define &vertical mode"), this);
+    modeSliceDefineVerticalAct->setShortcut(QKeySequence(Qt::Key_4));
+    modeSliceDefineVerticalAct->setStatusTip(tr("Define vertical ROM slices"));
+    connect(modeSliceDefineVerticalAct, &QAction::triggered, this, &MainWindow::setModeSliceDefineVertical);
+    modeSliceDefineVerticalAct->setCheckable(true);
+    
+    QAction* modeBitRegionDisplayAct = new QAction(tr("&Bit region display mode"), this);
+    modeBitRegionDisplayAct->setShortcut(QKeySequence(Qt::Key_5));
+    modeBitRegionDisplayAct->setStatusTip(tr("Show bit regions"));
+    connect(modeBitRegionDisplayAct, &QAction::triggered, this, &MainWindow::setModeBitRegionDisplay);
+    modeBitRegionDisplayAct->setCheckable(true);
+
+    QActionGroup* modeGroup = new QActionGroup(this);
+    modeGroup->addAction(modeNaviationAct);
+    modeGroup->addAction(modeBoundsDefineAct);
+    modeGroup->addAction(modeSliceDefineHorizontalAct);
+    modeGroup->addAction(modeSliceDefineVerticalAct);
+    modeGroup->addAction(modeBitRegionDisplayAct);
+    modeNaviationAct->setChecked(true);
+    
+    QMenu* modeMenu = menuBar()->addMenu(tr("&Mode"));
+    modeMenu->addAction(modeNaviationAct);
+    modeMenu->addAction(modeBoundsDefineAct);
+    modeMenu->addAction(modeSliceDefineHorizontalAct);
+    modeMenu->addAction(modeSliceDefineVerticalAct);
+    modeMenu->addAction(modeBitRegionDisplayAct);
+    
+    
+    // Create the view menu actions and menu item
+    QAction* centerImageAct = new QAction(tr("&Center Image"), this);
+    centerImageAct->setShortcut(QKeySequence(Qt::Key_C));
+    centerImageAct->setStatusTip(tr("Center image"));
+    connect(centerImageAct, &QAction::triggered, &m_drawWidget, &DrawWidget::centerImage);
+
+    QAction* frameImageAct = new QAction(tr("&Frame Image"), this);
+    frameImageAct->setShortcut(QKeySequence(Qt::Key_F));
+    frameImageAct->setStatusTip(tr("Frame image"));
+    connect(frameImageAct, &QAction::triggered, &m_drawWidget, &DrawWidget::frameImage);
+
+    QAction* resetImageAct = new QAction(tr("&Reset Image Display"), this);
+    resetImageAct->setShortcut(QKeySequence(Qt::Key_Z));
+    resetImageAct->setStatusTip(tr("Reset image display"));
+    connect(resetImageAct, &QAction::triggered, &m_drawWidget, &DrawWidget::resetImage);
+
+    QMenu* viewMenu = menuBar()->addMenu(tr("&View"));
+    viewMenu->addAction(centerImageAct);
+    viewMenu->addAction(frameImageAct);
+    viewMenu->addAction(resetImageAct);
+}
+
+
+void MainWindow::openImage()
+{
+    QString filename = QFileDialog::getOpenFileName(this, tr("Open Die Image"), "", tr("Images (*.png *.jpg *.tif)"));
+    if (filename != "")
+        loadImage(filename);
+}
+
+
+void MainWindow::openDieDescription()
+{
+    QString filename = QFileDialog::getOpenFileName(this, tr("Open Die Description File"), "", tr("ddf (*.ddf)"));
+    if (filename != "")
+        loadDescriptionJson(filename);
+}
+
+
+void MainWindow::saveDieDescription()
+{
+    QString filename = QFileDialog::getSaveFileName(this, tr("Save Die Description File"), "", tr("ddf (*.ddf)"));
+    if (filename != "")
+        saveDescriptionJson(filename);
+}
+
+
+void MainWindow::exportBitImage()
+{
+    // Save all bit locations as a condensend image
+    if (m_uiMode == BitRegionDisplay)
+    {
+        exportBitsToImage("/tmp/test.png");
+    }
+    else
+    {
+        qWarning() << "Switch to bit display mode to export";
+    }
+}
+
+
+void MainWindow::copySlices()
+{
+    // Copy selected slice offsets
+    m_copiedSliceOffsets.clear();
+    QVector<qreal>& slices = (m_uiMode == SliceDefineHorizontal) ? m_horizSlices : m_vertSlices;
+    for (int i = 0; i < m_activeSlices.size(); i++)
+    {
+        const int& asli = m_activeSlices[i];
+        const qreal offset = slices[asli] - slices[asli-1];
+        m_copiedSliceOffsets.push_back(offset);
+    }
+}
+
+
+void MainWindow::pasteSlices()
+{
+    // Paste selected slice offsets right where the mouse is
+    QVector<qreal>& slices = (m_uiMode == SliceDefineHorizontal) ? m_horizSlices : m_vertSlices;
+    const QPointF mouseImagePosition = m_drawWidget.window2Image(m_drawWidget.mapFromGlobal(QCursor::pos()));
+    const qreal pushOffset = romDieSpaceFromImagePoint(mouseImagePosition, m_uiMode);
+    
+    qreal runningSum = pushOffset;
+    for (int i = 0; i < m_copiedSliceOffsets.size(); i++)
+    {
+        // The first slice has no offset with this method of pasting (it appears right where the mouse is)
+        const qreal offset = (i == 0) ? 0.0 : m_copiedSliceOffsets[i];
+        
+        if (runningSum + offset >= 1.0)
+            continue;
+        
+        slices.push_back(runningSum + offset);
+        runningSum += offset;
+    }
+    recomputeSliceLinesFromHomography();
+    m_drawWidget.update();
+}
+
+
+void MainWindow::deselectSlices()
+{
+    // Deselect all slices
+    m_activeSlices.clear();
+    recomputeSliceLinesFromHomography();
+    m_drawWidget.update();
+}
+
+
+void MainWindow::deleteSlices()
+{
+    deleteSelectedSlices();
+    m_drawWidget.update();
+}
+
+
+void MainWindow::setModeNavigation()
+{
+    m_uiMode = Navigation;
+    QApplication::setOverrideCursor(Qt::ArrowCursor);
+    m_drawWidget.setConvexPolyPointer(&m_boundsPolygons);
+    m_drawWidget.setCircleCoordsPointer(&m_boundsPoints);
+    disconnect(m_lmbClickedConnection);
+    disconnect(m_lmbDraggedConnection);
+    disconnect(m_lmbReleasedConnection);
+    disconnect(m_rmbClickedConnection);
+    disconnect(m_rmbDraggedConnection);
+    m_drawWidget.update();
+}
+
+
+void MainWindow::setModeBoundsDefine()
+{
+    m_uiMode = BoundsDefine;
+    QApplication::setOverrideCursor(Qt::CrossCursor);
+    disconnect(m_lmbClickedConnection);
+    disconnect(m_lmbDraggedConnection);
+    disconnect(m_lmbReleasedConnection);
+    disconnect(m_rmbClickedConnection);
+    disconnect(m_rmbDraggedConnection);
+    m_drawWidget.setConvexPolyPointer(&m_boundsPolygons);
+    m_drawWidget.setCircleCoordsPointer(&m_boundsPoints);
+    m_lmbClickedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonClicked, this, &MainWindow::addOrMoveBoundsPoint);
+    m_lmbDraggedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonDragged, this, &MainWindow::dragBoundsPoint);
+    m_lmbReleasedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonReleased, this, &MainWindow::stopDraggingBoundsPoint);
+    m_drawWidget.update();
+}
+
+
+void MainWindow::setModeSliceDefineHorizontal()
+{
+    m_uiMode = SliceDefineHorizontal;
+    QApplication::setOverrideCursor(Qt::CrossCursor);
+    disconnect(m_lmbClickedConnection);
+    disconnect(m_lmbDraggedConnection);
+    disconnect(m_lmbReleasedConnection);
+    disconnect(m_rmbClickedConnection);
+    disconnect(m_rmbDraggedConnection);
+    m_drawWidget.setConvexPolyPointer(&m_boundsPolygons);
+    m_drawWidget.setCircleCoordsPointer(&m_boundsPoints);
+    m_lmbClickedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonClicked, this, &MainWindow::addOrMoveSlice);
+    m_rmbClickedConnection = connect(&m_drawWidget, &DrawWidget::rightButtonClicked, this, &MainWindow::selectSlice);
+    m_rmbDraggedConnection = connect(&m_drawWidget, &DrawWidget::rightButtonDragged, this, &MainWindow::selectMoreSlices);
+    m_activeSlices.clear();
+    recomputeSliceLinesFromHomography();
+    m_drawWidget.update();
+}
+
+
+void MainWindow::setModeSliceDefineVertical()
+{
+    m_uiMode = SliceDefineVertical;
+    QApplication::setOverrideCursor(Qt::CrossCursor);
+    disconnect(m_lmbClickedConnection);
+    disconnect(m_lmbDraggedConnection);
+    disconnect(m_lmbReleasedConnection);
+    disconnect(m_rmbClickedConnection);
+    disconnect(m_rmbDraggedConnection);
+    m_drawWidget.setConvexPolyPointer(&m_boundsPolygons);
+    m_drawWidget.setCircleCoordsPointer(&m_boundsPoints);
+    m_lmbClickedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonClicked, this, &MainWindow::addOrMoveSlice);
+    m_rmbClickedConnection = connect(&m_drawWidget, &DrawWidget::rightButtonClicked, this, &MainWindow::selectSlice);
+    m_rmbDraggedConnection = connect(&m_drawWidget, &DrawWidget::rightButtonDragged, this, &MainWindow::selectMoreSlices);
+    m_activeSlices.clear();
+    recomputeSliceLinesFromHomography();
+    m_drawWidget.update();
+}
+
+
+void MainWindow::setModeBitRegionDisplay()
+{
+    m_uiMode = BitRegionDisplay;
+    QApplication::setOverrideCursor(Qt::ArrowCursor);
+    disconnect(m_lmbClickedConnection);
+    disconnect(m_lmbDraggedConnection);
+    disconnect(m_lmbReleasedConnection);
+    disconnect(m_rmbClickedConnection);
+    disconnect(m_rmbDraggedConnection);
+    m_sliceLines.clear();
+    m_sliceLineColors.clear();
+    m_drawWidget.setConvexPolyPointer(NULL);
+    m_bitLocations = computeBitLocations();
+    m_drawWidget.setCircleCoordsPointer(&m_bitLocations);
+    
+    m_drawWidget.update();
 }
 
 
@@ -101,7 +414,7 @@ bool MainWindow::loadImage(const QString& filename)
     // Scale the image to the viewport if need be
     if (m_qImage.size().width() > m_drawWidget.size().width() ||
         m_qImage.size().height() > m_drawWidget.size().height())
-        m_drawWidget.scaleImageToViewport(false);
+        m_drawWidget.scaleImageToViewport();
 
     m_drawWidget.centerImage();
     
@@ -375,177 +688,6 @@ void MainWindow::selectMoreSlices(const QPointF& position)
             m_drawWidget.update();
             return;
         }
-    }
-}
-
-
-void MainWindow::keyPressEvent(QKeyEvent* event)
-{
-    bool ctrlHeld = event->modifiers() & Qt::ControlModifier;
-    
-    // TODO: Make these menu options soon
-    if (ctrlHeld && event->key() == Qt::Key_O)
-    {
-        // Load Image
-        QString filename = QFileDialog::getOpenFileName(this, tr("Open Image"), "", tr("Images (*.png *.jpg *.tif)"));
-        if (filename != "")
-            loadImage(filename);
-    }
-    else if (ctrlHeld && event->key() == Qt::Key_I)
-    {
-        // Load DDF
-        QString filename = QFileDialog::getOpenFileName(this, tr("Open Die Description File"), "", tr("ddf (*.ddf)"));
-        if (filename != "")
-            loadDescriptionJson(filename);
-    }
-    else if (ctrlHeld && event->key() == Qt::Key_S)
-    {
-        // Save DDF
-        QString filename = QFileDialog::getSaveFileName(this, tr("Save Die Description File"), "", tr("ddf (*.ddf)"));
-        if (filename != "")
-            saveDescriptionJson(filename);
-    }
-    else if (ctrlHeld && event->key() == Qt::Key_E)
-    {
-        // Save all bit locations as a condensend image
-        if (m_uiMode == BitRegionDisplay)
-        {
-            exportBitsToImage("/tmp/test.png");
-        }
-    }
-    else if (ctrlHeld && event->key() == Qt::Key_D)
-    {
-        // Deselect all slices
-        m_activeSlices.clear();
-        recomputeSliceLinesFromHomography();
-        m_drawWidget.update();
-    }
-    else if (ctrlHeld && event->key() == Qt::Key_B)
-    {
-        // Copy selected slice offsets
-        // TODO: Give me back my CTRL+C, you mean ole' GUI widget!  (this will be fixed when everything is menu-ized)
-        m_copiedSliceOffsets.clear();
-        QVector<qreal>& slices = (m_uiMode == SliceDefineHorizontal) ? m_horizSlices : m_vertSlices;
-        for (int i = 0; i < m_activeSlices.size(); i++)
-        {
-            const int& asli = m_activeSlices[i];
-            const qreal offset = slices[asli] - slices[asli-1];
-            m_copiedSliceOffsets.push_back(offset);
-        }
-    }
-    else if (ctrlHeld && event->key() == Qt::Key_V)
-    {
-        // Paste selected slice offsets right where the mouse is
-        QVector<qreal>& slices = (m_uiMode == SliceDefineHorizontal) ? m_horizSlices : m_vertSlices;
-        const QPointF mouseImagePosition = m_drawWidget.window2Image(m_drawWidget.mapFromGlobal(QCursor::pos()));
-        const qreal pushOffset = romDieSpaceFromImagePoint(mouseImagePosition, m_uiMode);
-        
-        qreal runningSum = pushOffset;
-        for (int i = 0; i < m_copiedSliceOffsets.size(); i++)
-        {
-            // The first slice has no offset with this method of pasting (it appears right where the mouse is)
-            const qreal offset = (i == 0) ? 0.0 : m_copiedSliceOffsets[i];
-            
-            if (runningSum + offset >= 1.0)
-                continue;
-            
-            slices.push_back(runningSum + offset);
-            runningSum += offset;
-        }
-        recomputeSliceLinesFromHomography();
-        m_drawWidget.update();
-    }
-    else if (event->key() == Qt::Key_0)
-    {
-        m_uiMode = Navigation;
-        QApplication::setOverrideCursor(Qt::ArrowCursor);
-        m_drawWidget.setConvexPolyPointer(&m_boundsPolygons);
-        m_drawWidget.setCircleCoordsPointer(&m_boundsPoints);
-        disconnect(m_lmbClickedConnection);
-        disconnect(m_lmbDraggedConnection);
-        disconnect(m_lmbReleasedConnection);
-        disconnect(m_rmbClickedConnection);
-        disconnect(m_rmbDraggedConnection);
-        m_drawWidget.update();
-    }
-    else if (event->key() == Qt::Key_1)
-    {
-        m_uiMode = BoundsDefine;
-        QApplication::setOverrideCursor(Qt::CrossCursor);
-        disconnect(m_lmbClickedConnection);
-        disconnect(m_lmbDraggedConnection);
-        disconnect(m_lmbReleasedConnection);
-        disconnect(m_rmbClickedConnection);
-        disconnect(m_rmbDraggedConnection);
-        m_drawWidget.setConvexPolyPointer(&m_boundsPolygons);
-        m_drawWidget.setCircleCoordsPointer(&m_boundsPoints);
-        m_lmbClickedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonClicked, this, &MainWindow::addOrMoveBoundsPoint);
-        m_lmbDraggedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonDragged, this, &MainWindow::dragBoundsPoint);
-        m_lmbReleasedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonReleased, this, &MainWindow::stopDraggingBoundsPoint);
-        m_drawWidget.update();
-    }
-    else if (event->key() == Qt::Key_2)
-    {
-        m_uiMode = SliceDefineHorizontal;
-        QApplication::setOverrideCursor(Qt::CrossCursor);
-        disconnect(m_lmbClickedConnection);
-        disconnect(m_lmbDraggedConnection);
-        disconnect(m_lmbReleasedConnection);
-        disconnect(m_rmbClickedConnection);
-        disconnect(m_rmbDraggedConnection);
-        m_drawWidget.setConvexPolyPointer(&m_boundsPolygons);
-        m_drawWidget.setCircleCoordsPointer(&m_boundsPoints);
-        m_lmbClickedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonClicked, this, &MainWindow::addOrMoveSlice);
-        m_rmbClickedConnection = connect(&m_drawWidget, &DrawWidget::rightButtonClicked, this, &MainWindow::selectSlice);
-        m_rmbDraggedConnection = connect(&m_drawWidget, &DrawWidget::rightButtonDragged, this, &MainWindow::selectMoreSlices);
-        m_activeSlices.clear();
-        recomputeSliceLinesFromHomography();
-        m_drawWidget.update();
-    }
-    else if (event->key() == Qt::Key_3)
-    {
-        m_uiMode = SliceDefineVertical;
-        QApplication::setOverrideCursor(Qt::CrossCursor);
-        disconnect(m_lmbClickedConnection);
-        disconnect(m_lmbDraggedConnection);
-        disconnect(m_lmbReleasedConnection);
-        disconnect(m_rmbClickedConnection);
-        disconnect(m_rmbDraggedConnection);
-        m_drawWidget.setConvexPolyPointer(&m_boundsPolygons);
-        m_drawWidget.setCircleCoordsPointer(&m_boundsPoints);
-        m_lmbClickedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonClicked, this, &MainWindow::addOrMoveSlice);
-        m_rmbClickedConnection = connect(&m_drawWidget, &DrawWidget::rightButtonClicked, this, &MainWindow::selectSlice);
-        m_rmbDraggedConnection = connect(&m_drawWidget, &DrawWidget::rightButtonDragged, this, &MainWindow::selectMoreSlices);
-        m_activeSlices.clear();
-        recomputeSliceLinesFromHomography();
-        m_drawWidget.update();
-    }
-    else if (event->key() == Qt::Key_4)
-    {
-        m_uiMode = BitRegionDisplay;
-        QApplication::setOverrideCursor(Qt::ArrowCursor);
-        disconnect(m_lmbClickedConnection);
-        disconnect(m_lmbDraggedConnection);
-        disconnect(m_lmbReleasedConnection);
-        disconnect(m_rmbClickedConnection);
-        
-        m_sliceLines.clear();
-        m_sliceLineColors.clear();
-        m_drawWidget.setConvexPolyPointer(NULL);
-        m_bitLocations = computeBitLocations();
-        m_drawWidget.setCircleCoordsPointer(&m_bitLocations);
-        
-        m_drawWidget.update();
-    }
-    else if (event->key() == Qt::Key_Delete)
-    {
-        deleteSelectedSlices();
-        m_drawWidget.update();
-    }
-    else
-    {
-        // We're not interested in the keypress?  Pass it up the inheritance chain
-        QMainWindow::keyPressEvent(event);
     }
 }
 

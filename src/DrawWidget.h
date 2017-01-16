@@ -26,9 +26,6 @@ public:
     bool setLinesPointer(const QVector<QLineF>* lines) { m_lines = lines; }
     bool setLineColorsPointer(const QVector<QColor>* lineColors) { m_lineColors = lineColors; }
     
-    void centerImage(const bool& refresh=true);
-    void scaleImageToViewport(const bool& refresh=true);
-    
     QPointF image2Window(const QPointF& image);
     QPointF window2Image(const QPointF& window);
     
@@ -46,11 +43,16 @@ signals:
 protected:
     void paintEvent(QPaintEvent *event) Q_DECL_OVERRIDE;
     void wheelEvent(QWheelEvent* event) Q_DECL_OVERRIDE;
-    void keyPressEvent(QKeyEvent* event) Q_DECL_OVERRIDE;
     void mouseMoveEvent(QMouseEvent* event) Q_DECL_OVERRIDE;
     void mousePressEvent(QMouseEvent* event) Q_DECL_OVERRIDE;
     void mouseReleaseEvent(QMouseEvent* event) Q_DECL_OVERRIDE;
 
+public slots:
+    void centerImage();
+    void scaleImageToViewport();
+    void frameImage();
+    void resetImage();
+   
 protected slots:
     // Default implementations of a few signals
     void imagePanStart(const QPointF& position);

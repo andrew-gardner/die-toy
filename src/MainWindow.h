@@ -37,10 +37,26 @@ public:
                   BitRegionDisplay };
     Q_ENUM(UiMode)
     
-protected:
-    void keyPressEvent(QKeyEvent* event) Q_DECL_OVERRIDE;
+private slots:
+    void openImage();
+    void openDieDescription();
+    void saveDieDescription();
+    void exportBitImage();
+    
+    void copySlices();
+    void pasteSlices();
+    void deselectSlices();
+    void deleteSlices();
+    
+    void setModeNavigation();
+    void setModeBoundsDefine();
+    void setModeSliceDefineHorizontal();
+    void setModeSliceDefineVertical();
+    void setModeBitRegionDisplay();
     
 private:
+    void createMenu();
+    
     void clearBoundsGeometry();
     void computeBoundsPolyAndHomography();
 
