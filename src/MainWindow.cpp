@@ -815,13 +815,43 @@ void MainWindow::recomputeSliceLinesFromHomography()
 
 void MainWindow::exportBitsToImage(const QString& filename)
 {
-    // TODO: Didn't have the time to finish this one
+    // TODO: Radius as a parameter
     const int radius = 6;
 
-    QSize resultImageSize((radius*2+1) * m_bitLocations.size(), radius*2);
-    QImage result(resultImageSize, QImage::Format_RGB32);
+    const int singleDim = radius * 2 + 1;
+    const int horizCount = m_horizSlices.size() + 2;
+    const int vertCount = m_vertSlices.size() + 2;
+    const int horizRedBars = horizCount + 1;
+    const int vertRedBars = vertCount + 1;
+    const QSize resultImageSize(singleDim * horizCount + horizRedBars, singleDim * vertCount + vertRedBars);
+    QImage resultImage(resultImageSize, QImage::Format_RGB32);
+    resultImage.fill(QColor(255, 0, 0));
+    
+    for (int i = 0; i < m_bitLocations.size(); i++)
+    {
+        const int rowIndex = i / horizCount;
+        const int colIndex = i % horizCount;
 
-    result.save(filename);
+        // TODO: Precision loss here
+        const int originalImageX = m_bitLocations[i].x();
+        const int originalImageY = m_bitLocations[i].y();
+        for (int y = 0; y < singleDim; y++)
+        {
+            for (int x = 0; x < singleDim; x++)
+            {
+                const int rowImageOffset = rowIndex * singleDim + rowIndex + 1;
+                const int colImageOffset = colIndex * singleDim + colIndex + 1;
+                
+                // TODO: Bilinear pixel sampling
+                const QColor originalImageColor = m_qImage.pixelColor(originalImageX + x - radius, 
+                                                                      originalImageY + y - radius);
+                
+                resultImage.setPixelColor(colImageOffset+x, rowImageOffset+y, originalImageColor);
+            }
+        }
+    }
+    
+    resultImage.save(filename);
 }
 
 
