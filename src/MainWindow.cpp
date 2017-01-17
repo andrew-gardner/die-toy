@@ -24,13 +24,13 @@
 // * Drag slice lines
 // * A single click adds both a horizontal and vertical slice line
 // * Flesh out more ways to paste (paste as an offset of last line, etc)
-// * Export all bit regions to new image(s)
 // * A range placement option - put start, put end, fill with X between
+// * Export all bit regions to new image(s)
 // * DrawWidget image chunking for clipping potential
 // * Wrap my head further around what can be easily cleaned up as visual stuff
 // * Convert the inefficient vectors to linked lists where necessary
 // * Sort the vectors in various places other than just the bit creator
-// * The diameter doesn't scale in the DrawWidget point clipping
+// * The diameter doesn't scale in the DrawWidget point clipping, nor do the line widths, etc.
 //
 
 
@@ -38,6 +38,7 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
     : m_uiMode(Navigation)
     , m_drawWidget()
     , m_qImage()
+    , m_dieDescriptionFilename("")
     , m_activeBoundsPoint(-1)
     , m_boundsPoints()
     , m_boundsPolygons()
@@ -46,6 +47,7 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
     , m_sliceLines()
     , m_activeSlices()
     , m_bitLocations()
+    , m_bitLocationTree()
     , m_sliceLineColors()
     , m_copiedSliceOffsets()
     , m_romRegionHomography()
@@ -135,11 +137,17 @@ void MainWindow::createMenu()
     deleteSlicesAct->setStatusTip(tr("Delete selected slices"));
     connect(deleteSlicesAct, &QAction::triggered, this, &MainWindow::deleteSlices);
     
+    QAction* testAct = new QAction(tr("&Test operation"), this);
+    testAct->setShortcut(QKeySequence(Qt::CTRL + Qt::Key_T));
+    testAct->setStatusTip(tr("Test!"));
+    connect(testAct, &QAction::triggered, this, &MainWindow::testOperation);
+    
     QMenu* editMenu = menuBar()->addMenu(tr("&Edit"));
     editMenu->addAction(copySlicesAct);
     editMenu->addAction(pasteSlicesAct);
     editMenu->addAction(deselectSlicesAct);
     editMenu->addAction(deleteSlicesAct);
+    editMenu->addAction(testAct);
     
     
     // Create the mode menu actions and menu item
@@ -230,7 +238,7 @@ void MainWindow::openDieDescription()
 
 void MainWindow::saveDieDescription()
 {
-    QString filename = QFileDialog::getSaveFileName(this, tr("Save Die Description File"), "", tr("ddf (*.ddf)"));
+    QString filename = QFileDialog::getSaveFileName(this, tr("Save Die Description File"), m_dieDescriptionFilename, tr("ddf (*.ddf)"));
     if (filename != "")
         saveDescriptionJson(filename);
 }
@@ -304,6 +312,28 @@ void MainWindow::deleteSlices()
 }
 
 
+void MainWindow::testOperation()
+{
+    qWarning() << "Executing test operation";
+    
+    // TEST for the point kdtree
+    if (m_bitLocationTree.dims() <= 0)
+        return;
+    const QPointF mouseImagePosition = m_drawWidget.window2Image(m_drawWidget.mapFromGlobal(QCursor::pos()));
+    cv::Mat mipVec(1, 2, CV_32F);
+    mipVec.at<float>(0, 0) = mouseImagePosition.x();
+    mipVec.at<float>(0, 1) = mouseImagePosition.y();
+    
+    const int K = 1;
+    const int eMax = 1000000000;
+    cv::Mat idx(K, 1, CV_32S);
+    cv::Mat dist(K, 2, CV_32F);
+    m_bitLocationTree.findNearest(mipVec, K, eMax, idx, cv::noArray(), dist);
+    qDebug() << idx.at<int>(0, 0);
+    //qDebug() << dist[0] << " " << dist[1] << " " << dist[2];
+}
+
+
 void MainWindow::setModeNavigation()
 {
     m_uiMode = Navigation;
@@ -315,6 +345,7 @@ void MainWindow::setModeNavigation()
     disconnect(m_lmbReleasedConnection);
     disconnect(m_rmbClickedConnection);
     disconnect(m_rmbDraggedConnection);
+    recomputeSliceLinesFromHomography();    
     m_drawWidget.update();
 }
 
@@ -542,6 +573,8 @@ bool MainWindow::loadDescriptionJson(const QString& filename)
     recomputeSliceLinesFromHomography();
     m_drawWidget.update();
     
+    m_dieDescriptionFilename = filename;
+            
     return true;
 }
 
@@ -748,7 +781,7 @@ void MainWindow::recomputeSliceLinesFromHomography()
     m_sliceLines.clear();
     m_sliceLineColors.clear();
     
-    if (m_uiMode == SliceDefineHorizontal)
+    if (m_uiMode == SliceDefineHorizontal || m_uiMode == Navigation)
     {
         for (int i = 0; i < m_horizSlices.size(); i++)
         {
@@ -763,7 +796,7 @@ void MainWindow::recomputeSliceLinesFromHomography()
         }
     }
 
-    if (m_uiMode == SliceDefineVertical)
+    if (m_uiMode == SliceDefineVertical || m_uiMode == Navigation)
     {
         for (int i = 0; i < m_vertSlices.size(); i++)
         {
@@ -845,6 +878,15 @@ QVector<QPointF> MainWindow::computeBitLocations()
         results.push_back(hLine.p2());
     }
     results.push_back(m_boundsPoints[2]);
+    
+    // Build the bit location acceleration tree 
+    cv::Mat foo(results.size(), 2, CV_32F);
+    for (int i = 0; i < results.size(); i++)
+    {
+        foo.at<float>(i, 0) = results[i].x();
+        foo.at<float>(i, 1) = results[i].y();
+    }
+    m_bitLocationTree.build(foo, false);
     
     return results;
 }

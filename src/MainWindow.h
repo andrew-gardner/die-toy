@@ -47,6 +47,7 @@ private slots:
     void pasteSlices();
     void deselectSlices();
     void deleteSlices();
+    void testOperation();
     
     void setModeNavigation();
     void setModeBoundsDefine();
@@ -79,6 +80,7 @@ private:
     
     // The full die image displayed
     QImage m_qImage;
+    QString m_dieDescriptionFilename;
     
     // ROM die region markers, the geometry that they create
     int m_activeBoundsPoint;
@@ -95,6 +97,7 @@ private:
     
     // The locations of every bit in the image
     QVector<QPointF> m_bitLocations;
+    cv::KDTree m_bitLocationTree;
     
     // Generated data used solely for display
     QVector<QLineF> m_sliceLines;
