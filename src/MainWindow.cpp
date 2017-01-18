@@ -851,6 +851,11 @@ void MainWindow::exportBitsToImage(const QString& filename)
         }
     }
     
+    resultImage.setText("bitImageWidth", QString::number(singleDim));
+    resultImage.setText("bitImageHeight", QString::number(singleDim));
+    resultImage.setText("bitImageCountAcross", QString::number(horizCount));
+    resultImage.setText("bitImageCountDown", QString::number(vertCount));
+    
     resultImage.save(filename);
 }
 
