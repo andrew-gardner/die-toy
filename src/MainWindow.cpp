@@ -21,13 +21,11 @@
 // * Status bar
 // * Convert everything to Qt undo command structure
 // * A view to see an enlarged version of the current bit region
-// * Drag slice lines
+// * Mouseover support to show bits in said view using m_bitLocationTree
 // * A single click adds both a horizontal and vertical slice line
 // * Flesh out more ways to paste (paste as an offset of last line, etc)
 // * A range placement option - put start, put end, fill with X between
-// * Export all bit regions to new image(s)
 // * DrawWidget image chunking for clipping potential
-// * Wrap my head further around what can be easily cleaned up as visual stuff
 // * Convert the inefficient vectors to linked lists where necessary
 // * Sort the vectors in various places other than just the bit creator
 // * The diameter doesn't scale in the DrawWidget point clipping, nor do the line widths, etc.
@@ -46,6 +44,7 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
     , m_vertSlices()
     , m_sliceLines()
     , m_activeSlices()
+    , m_sliceDragging(false)
     , m_bitLocations()
     , m_bitLocationTree()
     , m_sliceLineColors()
@@ -249,7 +248,9 @@ void MainWindow::exportBitImage()
     // Save all bit locations as a condensend image
     if (m_uiMode == BitRegionDisplay)
     {
-        exportBitsToImage("/tmp/test.png");
+        QString filename = QFileDialog::getSaveFileName(this, tr("Export bit image"), "", tr("png (*.png)"));
+        if (filename != "")
+            exportBitsToImage(filename);
     }
     else
     {
@@ -380,6 +381,8 @@ void MainWindow::setModeSliceDefineHorizontal()
     m_drawWidget.setConvexPolyPointer(&m_boundsPolygons);
     m_drawWidget.setCircleCoordsPointer(&m_boundsPoints);
     m_lmbClickedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonClicked, this, &MainWindow::addOrMoveSlice);
+    m_lmbDraggedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonDragged, this, &MainWindow::dragSlices);
+    m_lmbReleasedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonReleased, this, &MainWindow::stopDraggingSlices);
     m_rmbClickedConnection = connect(&m_drawWidget, &DrawWidget::rightButtonClicked, this, &MainWindow::selectSlice);
     m_rmbDraggedConnection = connect(&m_drawWidget, &DrawWidget::rightButtonDragged, this, &MainWindow::selectMoreSlices);
     m_activeSlices.clear();
@@ -400,6 +403,8 @@ void MainWindow::setModeSliceDefineVertical()
     m_drawWidget.setConvexPolyPointer(&m_boundsPolygons);
     m_drawWidget.setCircleCoordsPointer(&m_boundsPoints);
     m_lmbClickedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonClicked, this, &MainWindow::addOrMoveSlice);
+    m_lmbDraggedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonDragged, this, &MainWindow::dragSlices);
+    m_lmbReleasedConnection = connect(&m_drawWidget, &DrawWidget::leftButtonReleased, this, &MainWindow::stopDraggingSlices);
     m_rmbClickedConnection = connect(&m_drawWidget, &DrawWidget::rightButtonClicked, this, &MainWindow::selectSlice);
     m_rmbDraggedConnection = connect(&m_drawWidget, &DrawWidget::rightButtonDragged, this, &MainWindow::selectMoreSlices);
     m_activeSlices.clear();
@@ -637,13 +642,26 @@ void MainWindow::addOrMoveSlice(const QPointF& position)
     if (m_boundsPolygons.size() == 0)
         return;
     
-    // You can only do something by clicking side the bounds poly
+    // You can only do something by clicking inside the bounds poly
     if (!m_boundsPolygons[0].containsPoint(position, Qt::OddEvenFill))
         return;
     
     // Switch the slice we're operating on based on the current ui mode
     QVector<qreal>& slices = (m_uiMode == SliceDefineHorizontal) ? m_horizSlices : m_vertSlices;
 
+    // If there are selected lines, maybe you want to drag them
+    for (int i = 0; i < m_activeSlices.size(); i++)
+    {
+        // TODO: Scale selection distance based on drawWidget zoom factor
+        const qreal distance = linePointDistance(slicePositionToLine(slices[m_activeSlices[i]], m_uiMode), position);
+        if (distance < 5.0f)
+        {
+            m_sliceDragging = true;
+            m_sliceDragOrigin = position;
+            return;
+        }
+    }
+    
     // Convert the image-space position into ROM-die-space using the homography
     slices.push_back(romDieSpaceFromImagePoint(position, m_uiMode));
 
@@ -658,7 +676,7 @@ void MainWindow::selectSlice(const QPointF& position)
     if (m_boundsPolygons.size() == 0)
         return;
     
-    // You can only do something by clicking side the bounds poly
+    // You can only do something by clicking inside the bounds poly
     if (!m_boundsPolygons[0].containsPoint(position, Qt::OddEvenFill))
         return;
     
@@ -695,7 +713,7 @@ void MainWindow::selectMoreSlices(const QPointF& position)
     if (m_boundsPolygons.size() == 0)
         return;
     
-    // You can only do something by clicking side the bounds poly
+    // You can only do something by clicking inside the bounds poly
     if (!m_boundsPolygons[0].containsPoint(position, Qt::OddEvenFill))
         return;
     
@@ -722,6 +740,33 @@ void MainWindow::selectMoreSlices(const QPointF& position)
             return;
         }
     }
+}
+
+
+void MainWindow::dragSlices(const QPointF& position)
+{
+    if (!m_sliceDragging)
+        return;
+    
+    // Switch the slice we're operating on based on the current ui mode
+    QVector<qreal>& slices = (m_uiMode == SliceDefineHorizontal) ? m_horizSlices : m_vertSlices;
+
+    const qreal dragDelta = romDieSpaceFromImagePoint(position, m_uiMode) - romDieSpaceFromImagePoint(m_sliceDragOrigin, m_uiMode);
+    for (int i = 0; i < m_activeSlices.size(); i++)
+    {
+        const int sliceIndex = m_activeSlices[i];
+        slices[sliceIndex] += dragDelta;
+    }
+    m_sliceDragOrigin = position;
+
+    recomputeSliceLinesFromHomography();
+    m_drawWidget.update();
+}
+
+
+void MainWindow::stopDraggingSlices(const QPointF& position)
+{
+    m_sliceDragging = false;
 }
 
 

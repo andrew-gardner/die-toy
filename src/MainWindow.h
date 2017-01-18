@@ -25,10 +25,10 @@ public:
     void stopDraggingBoundsPoint(const QPointF& position);
 
     void addOrMoveSlice(const QPointF& position);
-    
     void selectSlice(const QPointF& position);
     void selectMoreSlices(const QPointF& position);
-    //void stopDraggingSlice(const QPointF& position);
+    void dragSlices(const QPointF& position);
+    void stopDraggingSlices(const QPointF& position);
     
     enum UiMode { Navigation, 
                   BoundsDefine, 
@@ -94,6 +94,8 @@ private:
 
     // Selection mask for the active slice mode
     QVector<int> m_activeSlices;
+    bool m_sliceDragging;
+    QPointF m_sliceDragOrigin;
     
     // The locations of every bit in the image
     QVector<QPointF> m_bitLocations;
