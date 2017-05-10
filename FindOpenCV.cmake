@@ -12,6 +12,8 @@
 #
 # $Id: $
 #  
+# Joel [2011-04-04] 
+# - Added Deafult serach paths for MacOSX fink verisons
 # Balazs [2011-01-18]:
 # - Created from scratch for the reorganized OpenCV 2 structure introduced at version 2.2
 #
@@ -118,6 +120,9 @@ IF(WIN32)
     FIND_LIBRARY(OpenCV2_CONTRIB_LIBRARY
                  NAMES opencv_contrib230 opencv_contrib220
                  PATHS ${OPENCV2_LIBRARY_SEARCH_PATHS})
+    FIND_LIBRARY(OpenCV2_OPTFLOW_LIBRARY
+                 NAMES opencv_flow
+                 PATHS ${OPENCV2_LIBRARY_SEARCH_PATHS})
     FIND_LIBRARY(OpenCV2_HIGHGUI_LIBRARY
                  NAMES opencv_highgui230 opencv_highgui220
                  PATHS ${OPENCV2_LIBRARY_SEARCH_PATHS})
@@ -126,6 +131,9 @@ IF(WIN32)
                  PATHS ${OPENCV2_LIBRARY_SEARCH_PATHS})
     FIND_LIBRARY(OpenCV2_VIDEO_LIBRARY
                  NAMES opencv_video230 opencv_video220
+                 PATHS ${OPENCV2_LIBRARY_SEARCH_PATHS})
+    FIND_LIBRARY(OpenCV2_IMAGE_CODECS_LIBRARY
+                 NAMES opencv_imgcodecs
                  PATHS ${OPENCV2_LIBRARY_SEARCH_PATHS})
     FIND_LIBRARY(OpenCV2_GPU_LIBRARY
                  NAMES opencv_gpu230 opencv_gpu220
@@ -145,9 +153,11 @@ ELSE(WIN32)
     FIND_LIBRARY(OpenCV2_OBJDETECT_LIBRARY  NAMES opencv_objdetect  PATHS ${OPENCV2_LIBRARY_SEARCH_PATHS})
     FIND_LIBRARY(OpenCV2_LEGACY_LIBRARY     NAMES opencv_legacy     PATHS ${OPENCV2_LIBRARY_SEARCH_PATHS})
     FIND_LIBRARY(OpenCV2_CONTRIB_LIBRARY    NAMES opencv_contrib    PATHS ${OPENCV2_LIBRARY_SEARCH_PATHS})
+    FIND_LIBRARY(OpenCV2_OPTFLOW_LIBRARY    NAMES opencv_optflow    PATHS ${OPENCV2_LIBRARY_SEARCH_PATHS})
     FIND_LIBRARY(OpenCV2_HIGHGUI_LIBRARY    NAMES opencv_highgui    PATHS ${OPENCV2_LIBRARY_SEARCH_PATHS})
     FIND_LIBRARY(OpenCV2_ML_LIBRARY         NAMES opencv_ml         PATHS ${OPENCV2_LIBRARY_SEARCH_PATHS})
     FIND_LIBRARY(OpenCV2_VIDEO_LIBRARY      NAMES opencv_video      PATHS ${OPENCV2_LIBRARY_SEARCH_PATHS})
+    FIND_LIBRARY(OpenCV2_IMAGE_CODECS_LIBRARY      NAMES opencv_imgcodecs      PATHS ${OPENCV2_LIBRARY_SEARCH_PATHS})
     FIND_LIBRARY(OpenCV2_GPU_LIBRARY        NAMES opencv_gpu        PATHS ${OPENCV2_LIBRARY_SEARCH_PATHS})
 ENDIF(WIN32)
 
@@ -160,12 +170,12 @@ SET(OpenCV2_INCLUDE_DIRS
     ${OpenCV2_FLANN_INCLUDE_DIR}
     ${OpenCV2_CALIB3D_INCLUDE_DIR}
     ${OpenCV2_OBJDETECT_INCLUDE_DIR}
-    ${OpenCV2_LEGACY_INCLUDE_DIR}
-    ${OpenCV2_CONTRIB_INCLUDE_DIR}
+    #${OpenCV2_LEGACY_INCLUDE_DIR}
+    #${OpenCV2_CONTRIB_INCLUDE_DIR}
     ${OpenCV2_HIGHGUI_INCLUDE_DIR}
     ${OpenCV2_ML_INCLUDE_DIR}
     ${OpenCV2_VIDEO_INCLUDE_DIR}
-    ${OpenCV2_GPU_INCLUDE_DIR}
+    #${OpenCV2_GPU_INCLUDE_DIR}
     )
 
 SET(OpenCV2_LIBRARIES
@@ -175,12 +185,14 @@ SET(OpenCV2_LIBRARIES
     ${OpenCV2_FLANN_LIBRARY}
     ${OpenCV2_CALIB3D_LIBRARY}
     ${OpenCV2_OBJDETECT_LIBRARY}
-    ${OpenCV2_LEGACY_LIBRARY}
-    ${OpenCV2_CONTRIB_LIBRARY}
+    #${OpenCV2_LEGACY_LIBRARY}
+    #${OpenCV2_CONTRIB_LIBRARY}
+    ${OpenCV2_OPTFLOW_LIBRARY}
     ${OpenCV2_HIGHGUI_LIBRARY}
     ${OpenCV2_ML_LIBRARY}
     ${OpenCV2_VIDEO_LIBRARY}
-    ${OpenCV2_GPU_LIBRARY}
+    ${OpenCV2_IMAGE_CODECS_LIBRARY}
+    #${OpenCV2_GPU_LIBRARY}
     )
 IF(WIN32)
     SET(OpenCV2_INCLUDE_DIRS
@@ -228,9 +240,11 @@ MARK_AS_ADVANCED(FORCE
                  OpenCV2_OBJDETECT_LIBRARY
                  OpenCV2_LEGACY_LIBRARY
                  OpenCV2_CONTRIB_LIBRARY
+                 OpenCV2_OPTFLOW_LIBRARY
                  OpenCV2_HIGHGUI_LIBRARY
                  OpenCV2_ML_LIBRARY
                  OpenCV2_VIDEO_LIBRARY
+                 OpenCV2_IMAGE_CODECS_LIBRARY
                  OpenCV2_GPU_LIBRARY
                  )
 IF(WIN32)

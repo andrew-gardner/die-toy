@@ -46,7 +46,6 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
     , m_activeSlices()
     , m_sliceDragging(false)
     , m_bitLocations()
-    , m_bitLocationTree()
     , m_sliceLineColors()
     , m_copiedSliceOffsets()
     , m_romRegionHomography()
@@ -69,7 +68,9 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
     m_drawWidget.setConvexPolyPointer(&m_boundsPolygons);
     m_drawWidget.setLinesPointer(&m_sliceLines);
     m_drawWidget.setLineColorsPointer(&m_sliceLineColors);
-    
+
+    m_bitLocationTree = cv::ml::KNearest::create();
+
     createMenu();
 }
 
@@ -315,23 +316,23 @@ void MainWindow::deleteSlices()
 
 void MainWindow::testOperation()
 {
-    qWarning() << "Executing test operation";
-    
+    qDebug() << "Executing test operation";
+
     // TEST for the point kdtree
-    if (m_bitLocationTree.dims() <= 0)
+    if (m_bitLocationTree->empty())
         return;
+
+    // Where is the mouse now?
     const QPointF mouseImagePosition = m_drawWidget.window2Image(m_drawWidget.mapFromGlobal(QCursor::pos()));
     cv::Mat mipVec(1, 2, CV_32F);
     mipVec.at<float>(0, 0) = mouseImagePosition.x();
     mipVec.at<float>(0, 1) = mouseImagePosition.y();
     
+    // Recover K nearest neighbors
     const int K = 1;
-    const int eMax = 1000000000;
-    cv::Mat idx(K, 1, CV_32S);
-    cv::Mat dist(K, 2, CV_32F);
-    m_bitLocationTree.findNearest(mipVec, K, eMax, idx, cv::noArray(), dist);
-    qDebug() << idx.at<int>(0, 0);
-    //qDebug() << dist[0] << " " << dist[1] << " " << dist[2];
+    cv::Mat results;
+    m_bitLocationTree->findNearest(mipVec, K, results);
+    qDebug() << results.at<float>(0,0);
 }
 
 
@@ -959,15 +960,21 @@ QVector<QPointF> MainWindow::computeBitLocations()
     }
     results.push_back(m_boundsPoints[2]);
     
-    // Build the bit location acceleration tree 
-    cv::Mat foo(results.size(), 2, CV_32F);
+    // Build the bit location acceleration tree
+    // TODO: Move elsewhere
+    cv::Mat matTrainFeatures(results.size(), 2, CV_32F);
+    cv::Mat matTrainLabels(results.size(), 1, CV_32F);
     for (int i = 0; i < results.size(); i++)
     {
-        foo.at<float>(i, 0) = results[i].x();
-        foo.at<float>(i, 1) = results[i].y();
+        matTrainFeatures.at<float>(i, 0) = results[i].x();
+        matTrainFeatures.at<float>(i, 1) = results[i].y();
+        matTrainLabels.at<float>(i, 0) = i;
     }
-    m_bitLocationTree.build(foo, false);
-    
+    cv::Ptr<cv::ml::TrainData> trainingData = cv::ml::TrainData::create(matTrainFeatures,
+                                                                        cv::ml::SampleTypes::ROW_SAMPLE,
+                                                                        matTrainLabels);
+    m_bitLocationTree->train(trainingData);
+
     return results;
 }
 

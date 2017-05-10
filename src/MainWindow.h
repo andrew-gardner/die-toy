@@ -99,7 +99,7 @@ private:
     
     // The locations of every bit in the image
     QVector<QPointF> m_bitLocations;
-    cv::KDTree m_bitLocationTree;
+    cv::Ptr<cv::ml::KNearest> m_bitLocationTree;
     
     // Generated data used solely for display
     QVector<QLineF> m_sliceLines;
