@@ -827,7 +827,7 @@ void MainWindow::recomputeSliceLinesFromHomography()
     m_sliceLines.clear();
     m_sliceLineColors.clear();
     
-    if (m_uiMode == SliceDefineHorizontal || m_uiMode == Navigation)
+    if (m_uiMode == SliceDefineHorizontal || m_uiMode == Navigation || m_uiMode == BoundsDefine)
     {
         for (int i = 0; i < m_horizSlices.size(); i++)
         {
@@ -842,7 +842,7 @@ void MainWindow::recomputeSliceLinesFromHomography()
         }
     }
 
-    if (m_uiMode == SliceDefineVertical || m_uiMode == Navigation)
+    if (m_uiMode == SliceDefineVertical || m_uiMode == Navigation || m_uiMode == BoundsDefine)
     {
         for (int i = 0; i < m_vertSlices.size(); i++)
         {
