@@ -888,16 +888,21 @@ void MainWindow::recomputeSliceLinesFromHomography()
 
 void MainWindow::exportBitsToImage(const QString& filename)
 {
-    // TODO: Radius as a parameter
+    // TODO: These values as parameters
     const int radius = 6;
+    const int sliceBitWidth = 16;
+    const int sliceBitHeight = 32;
 
-    const int vertCount = m_vertSlices.size() + 2;
-    const int horizCount = m_horizSlices.size() + 2;
-    const int horizRedBars = horizCount + 1;
-    const int vertRedBars = vertCount + 1;
+    const int vertBitCount = m_vertSlices.size() + 2;
+    const int horizBitCount = m_horizSlices.size() + 2;
+    const int numImagesHorizontally = ceilf((float)horizBitCount / (float)sliceBitWidth);
+    const int numImagesVertically = ceilf((float)vertBitCount / (float)sliceBitHeight);
+    const int horizRedBars = (horizBitCount / numImagesHorizontally) + 1;
+    const int vertRedBars = (vertBitCount / numImagesVertically) + 1;
 
     const int singleDim = radius * 2 + 1;
-    const QSize resultImageSize(singleDim * horizCount + horizRedBars, singleDim * vertCount + vertRedBars);
+    const QSize resultImageSize(singleDim * sliceBitWidth + horizRedBars,
+                                singleDim * sliceBitHeight + vertRedBars);
     QImage resultImage(resultImageSize, QImage::Format_RGB32);
     resultImage.fill(QColor(255, 0, 0));
 
@@ -916,14 +921,19 @@ void MainWindow::exportBitsToImage(const QString& filename)
                                                                       originalImageY + y - radius);
 
                 // Compute destination X
-                const int xBitIndex = i % horizCount;
+                const int xImageIndex = (i % horizBitCount) / sliceBitWidth;
+                const int xBitIndex = i % sliceBitWidth;
                 const int xRedBarCount = xBitIndex + 1;
                 const int xResultOffset = (xBitIndex * singleDim) + xRedBarCount;
 
                 // Compute destination Y
-                const int yBitIndex = i / horizCount;
+                const int yImageIndex = (i / horizBitCount) / sliceBitHeight;
+                const int yBitIndex = i / (sliceBitWidth * numImagesHorizontally);
                 const int yRedBarCount = yBitIndex + 1;
                 const int yResultOffset = (yBitIndex * singleDim) + yRedBarCount;
+
+                if (xImageIndex != 8 || yImageIndex != 0)
+                    continue;
 
                 // Set
                 resultImage.setPixelColor(xResultOffset+x, yResultOffset+y, originalImageColor);
@@ -933,8 +943,8 @@ void MainWindow::exportBitsToImage(const QString& filename)
     
     resultImage.setText("bitImageWidth", QString::number(singleDim));
     resultImage.setText("bitImageHeight", QString::number(singleDim));
-    resultImage.setText("bitImageCountAcross", QString::number(horizCount));
-    resultImage.setText("bitImageCountDown", QString::number(vertCount));
+    resultImage.setText("bitImageCountAcross", QString::number(horizBitCount));
+    resultImage.setText("bitImageCountDown", QString::number(vertBitCount));
     
     resultImage.save(filename);
 }
