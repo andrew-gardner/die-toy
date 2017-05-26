@@ -104,6 +104,10 @@ void MainWindow::createMenu()
     exportBitImageAct->setStatusTip(tr("Export the marked bits to a special bit image PNG"));
     connect(exportBitImageAct, &QAction::triggered, this, &MainWindow::exportBitImage);
     
+    QAction* exportSlicedImageAct = new QAction(tr("&Export Sliced PNGs"), this);
+    exportSlicedImageAct->setStatusTip(tr("Export the marked die to a series of smaller PNGs"));
+    connect(exportSlicedImageAct, &QAction::triggered, this, &MainWindow::exportSlicedImage);
+
     QAction* quitAct = new QAction(tr("E&xit"), this);
     quitAct->setShortcuts(QKeySequence::Quit);
     connect(quitAct, &QAction::triggered, this, &MainWindow::close);
@@ -113,6 +117,7 @@ void MainWindow::createMenu()
     fileMenu->addAction(openDDFAct);
     fileMenu->addAction(saveDDFAct);
     fileMenu->addAction(exportBitImageAct);
+    fileMenu->addAction(exportSlicedImageAct);
     fileMenu->addAction(quitAct);
 
 
@@ -260,6 +265,22 @@ void MainWindow::exportBitImage()
 }
 
 
+void MainWindow::exportSlicedImage()
+{
+    // Save a series of images which all come from the original image
+    if (m_uiMode == BitRegionDisplay)
+    {
+        QString filename = QFileDialog::getSaveFileName(this, tr("Export bit image"), "", tr("(*.*)"));
+        if (filename != "")
+            exportToSlicedImages(filename);
+    }
+    else
+    {
+        qWarning() << "Switch to bit display mode to export";
+    }
+}
+
+
 void MainWindow::copySlices()
 {
     // Copy selected slice offsets
@@ -317,6 +338,12 @@ void MainWindow::deleteSlices()
 void MainWindow::testOperation()
 {
     qDebug() << "Executing test operation";
+
+    // Debug info
+    const int vertCount = m_vertSlices.size() + 2;
+    const int horizCount = m_horizSlices.size() + 2;
+    qDebug() << "Slice counts" << horizCount << vertCount;
+
 
     // TEST for the point kdtree
     if (m_bitLocationTree->empty())
@@ -865,8 +892,8 @@ void MainWindow::exportBitsToImage(const QString& filename)
     const int radius = 6;
 
     const int singleDim = radius * 2 + 1;
-    const int horizCount = m_horizSlices.size() + 2;
     const int vertCount = m_vertSlices.size() + 2;
+    const int horizCount = m_horizSlices.size() + 2;
     const int horizRedBars = horizCount + 1;
     const int vertRedBars = vertCount + 1;
     const QSize resultImageSize(singleDim * horizCount + horizRedBars, singleDim * vertCount + vertRedBars);
@@ -903,6 +930,41 @@ void MainWindow::exportBitsToImage(const QString& filename)
     resultImage.setText("bitImageCountDown", QString::number(vertCount));
     
     resultImage.save(filename);
+}
+
+
+void MainWindow::exportToSlicedImages(const QString& filenamePrefix)
+{
+    // TODO: Dimensions and radius as parameters
+    const int radius = 6;
+    const int sliceBitWidth = 16;
+    const int sliceBitHeight = 32;
+
+    const int vertBitCount = m_vertSlices.size() + 2;
+    const int horizBitCount = m_horizSlices.size() + 2;
+    const int numImagesHorizontally = ceilf((float)horizBitCount / (float)sliceBitWidth);
+    const int numImagesVertically = ceilf((float)vertBitCount / (float)sliceBitHeight);
+
+    qDebug() << "Exporting " << numImagesHorizontally << "images by" << numImagesVertically;
+    for (int y = 0; y < numImagesVertically; y++)
+    {
+        for (int x = 0; x < numImagesHorizontally; x++)
+        {
+            const int rowIndex = y * sliceBitHeight;
+            const int colIndex = x * sliceBitWidth;
+            const int bitIndex = (rowIndex * horizBitCount) + colIndex;
+
+            const int lowerX = m_bitLocations[bitIndex].x() - radius;
+            const int upperX = m_bitLocations[bitIndex+sliceBitWidth-1].x() + radius;
+            const int lowerY = m_bitLocations[bitIndex].y() - radius;
+            const int upperY = m_bitLocations[bitIndex+((sliceBitHeight-1)*horizBitCount)].y() + radius;
+            const QRect foo(lowerX, lowerY, upperX-lowerX, upperY-lowerY);
+            const QImage subImage = m_qImage.copy(foo);
+
+            const QString fn = QString("/tmp/foo_%1_%2.png").arg(x, 2, 10, QChar('0')).arg(y, 2, 10, QChar('0'));
+            subImage.save(fn);
+        }
+    }
 }
 
 

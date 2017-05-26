@@ -42,6 +42,7 @@ private slots:
     void openDieDescription();
     void saveDieDescription();
     void exportBitImage();
+    void exportSlicedImage();
     
     void copySlices();
     void pasteSlices();
@@ -65,7 +66,8 @@ private:
     void recomputeSliceLinesFromHomography();
     
     void exportBitsToImage(const QString& filename);
-    
+    void exportToSlicedImages(const QString& filenamePrefix);
+
     QVector<QPointF> computeBitLocations();
     
     qreal romDieSpaceFromImagePoint(const QPointF& iPoint, const UiMode& hv);
