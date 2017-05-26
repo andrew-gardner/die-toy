@@ -891,35 +891,42 @@ void MainWindow::exportBitsToImage(const QString& filename)
     // TODO: Radius as a parameter
     const int radius = 6;
 
-    const int singleDim = radius * 2 + 1;
     const int vertCount = m_vertSlices.size() + 2;
     const int horizCount = m_horizSlices.size() + 2;
     const int horizRedBars = horizCount + 1;
     const int vertRedBars = vertCount + 1;
+
+    const int singleDim = radius * 2 + 1;
     const QSize resultImageSize(singleDim * horizCount + horizRedBars, singleDim * vertCount + vertRedBars);
     QImage resultImage(resultImageSize, QImage::Format_RGB32);
     resultImage.fill(QColor(255, 0, 0));
-    
+
+    // For each marked bit in the original image
     for (int i = 0; i < m_bitLocations.size(); i++)
     {
-        const int rowIndex = i / horizCount;
-        const int colIndex = i % horizCount;
-
-        // TODO: Precision loss here
-        const int originalImageX = m_bitLocations[i].x();
-        const int originalImageY = m_bitLocations[i].y();
+        // Splat data from the original image to the result image
         for (int y = 0; y < singleDim; y++)
         {
             for (int x = 0; x < singleDim; x++)
             {
-                const int rowImageOffset = rowIndex * singleDim + rowIndex + 1;
-                const int colImageOffset = colIndex * singleDim + colIndex + 1;
-                
-                // TODO: Bilinear pixel sampling
-                const QColor originalImageColor = m_qImage.pixelColor(originalImageX + x - radius, 
+                // TODO: Bilinear pixel sampling (concatenating bitLocation to an int isn't so cool)
+                const int originalImageX = m_bitLocations[i].x();
+                const int originalImageY = m_bitLocations[i].y();
+                const QColor originalImageColor = m_qImage.pixelColor(originalImageX + x - radius,
                                                                       originalImageY + y - radius);
-                
-                resultImage.setPixelColor(colImageOffset+x, rowImageOffset+y, originalImageColor);
+
+                // Compute destination X
+                const int xBitIndex = i % horizCount;
+                const int xRedBarCount = xBitIndex + 1;
+                const int xResultOffset = (xBitIndex * singleDim) + xRedBarCount;
+
+                // Compute destination Y
+                const int yBitIndex = i / horizCount;
+                const int yRedBarCount = yBitIndex + 1;
+                const int yResultOffset = (yBitIndex * singleDim) + yRedBarCount;
+
+                // Set
+                resultImage.setPixelColor(xResultOffset+x, yResultOffset+y, originalImageColor);
             }
         }
     }
