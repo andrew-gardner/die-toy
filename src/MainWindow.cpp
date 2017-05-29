@@ -903,10 +903,15 @@ void MainWindow::exportBitsToImage(const QString& filename)
     const int singleDim = radius * 2 + 1;
     const QSize resultImageSize(singleDim * sliceBitWidth + horizRedBars,
                                 singleDim * sliceBitHeight + vertRedBars);
-    QImage resultImage(resultImageSize, QImage::Format_RGB32);
-    resultImage.fill(QColor(255, 0, 0));
+    QVector<QImage> resultImages(numImagesHorizontally*numImagesVertically);
+    for (int i = 0; i < resultImages.size(); i++)
+    {
+        resultImages[i] = QImage(resultImageSize, QImage::Format_RGB32);
+        resultImages[i].fill(QColor(255, 0, 0));
+    }
 
     // For each marked bit in the original image
+    qDebug() << "Exporting " << numImagesHorizontally << "images by" << numImagesVertically;
     for (int i = 0; i < m_bitLocations.size(); i++)
     {
         // Splat data from the original image to the result image
@@ -923,30 +928,40 @@ void MainWindow::exportBitsToImage(const QString& filename)
                 // Compute destination X
                 const int xImageIndex = (i % horizBitCount) / sliceBitWidth;
                 const int xBitIndex = i % sliceBitWidth;
-                const int xRedBarCount = xBitIndex + 1;
+                const int xRedBarCount = (xBitIndex % sliceBitWidth) + 1;
                 const int xResultOffset = (xBitIndex * singleDim) + xRedBarCount;
 
                 // Compute destination Y
                 const int yImageIndex = (i / horizBitCount) / sliceBitHeight;
                 const int yBitIndex = i / (sliceBitWidth * numImagesHorizontally);
-                const int yRedBarCount = yBitIndex + 1;
-                const int yResultOffset = (yBitIndex * singleDim) + yRedBarCount;
-
-                if (xImageIndex != 8 || yImageIndex != 0)
-                    continue;
+                const int yRedBarCount = (yBitIndex % sliceBitHeight) + 1;
+                const int yResultOffset = ((yBitIndex % sliceBitHeight) * singleDim) + yRedBarCount;
 
                 // Set
-                resultImage.setPixelColor(xResultOffset+x, yResultOffset+y, originalImageColor);
+                const int imageNum = xImageIndex + (yImageIndex * numImagesHorizontally);
+                resultImages[imageNum].setPixelColor(xResultOffset+x, yResultOffset+y, originalImageColor);
             }
         }
     }
     
-    resultImage.setText("bitImageWidth", QString::number(singleDim));
-    resultImage.setText("bitImageHeight", QString::number(singleDim));
-    resultImage.setText("bitImageCountAcross", QString::number(horizBitCount));
-    resultImage.setText("bitImageCountDown", QString::number(vertBitCount));
-    
-    resultImage.save(filename);
+    // Save the images
+    const int filenameExtensionStart = filename.lastIndexOf(".");
+    for (int i = 0; i < resultImages.size(); i++)
+    {
+        const int imageX = i % numImagesHorizontally;
+        const int imageY = i / numImagesHorizontally;
+
+        resultImages[i].setText("bitImageWidth", QString::number(singleDim));
+        resultImages[i].setText("bitImageHeight", QString::number(singleDim));
+        resultImages[i].setText("bitImageCountAcross", QString::number(horizBitCount));
+        resultImages[i].setText("bitImageCountDown", QString::number(vertBitCount));
+
+        QString outName = QString("%1_%2_%3%4").arg(filename.left(filenameExtensionStart))
+                                                .arg(imageX, 2, 10, QChar('0'))
+                                                .arg(imageY, 2, 10, QChar('0'))
+                                                .arg(filename.mid(filenameExtensionStart));
+        resultImages[i].save(outName);
+    }
 }
 
 
