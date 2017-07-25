@@ -890,8 +890,8 @@ void MainWindow::exportBitsToImage(const QString& filename)
 {
     // TODO: These values as parameters
     const int radius = 6;
-    const int sliceBitWidth = 16;
-    const int sliceBitHeight = 32;
+    const int sliceBitWidth = 8;
+    const int sliceBitHeight = 8;
 
     const int vertBitCount = m_vertSlices.size() + 2;
     const int horizBitCount = m_horizSlices.size() + 2;
